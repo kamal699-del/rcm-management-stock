@@ -2,7 +2,7 @@
 import {useEffect,useMemo,useState} from 'react';
 import {supabase} from '../lib/supabase';
 
-const menu=[['dashboard','Dashboard'],['warehouse','Stok Gudang'],['transfer','Transfer'],['opname','Input Sisa'],['history','Riwayat'],['products','Master Produk'],['users','User / Role']];
+const menu=[['dashboard','Dashboard'],['stockin','Input Stok Gudang'],['warehouse','Stok Gudang'],['transfer','Transfer'],['opname','Input Sisa'],['history','Riwayat'],['products','Master Produk'],['users','User / Role']];
 const fmt=(n)=>Number(n||0).toLocaleString('id-ID',{maximumFractionDigits:3});
 
 export default function Home(){
@@ -16,6 +16,7 @@ export default function Home(){
  const storeId=profile?.store_id;
  return <div className="shell"><aside><div className="sidebrand"><b>RCM</b><span>Management Stock</span></div><nav>{menu.map(([id,label])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}>{label}</button>)}</nav><button className="logout" onClick={logout}>Keluar</button></aside><main className="content"><header><div><small>STORE</small><h2>{profile?.stores?.name||'LC Rancamanyar'}</h2></div><div className="user">{profile?.full_name||session.user.email}<small>{profile?.role||'crew'}</small></div></header>{msg&&<div className="error top-error">{msg}</div>}<section>
  {tab==='dashboard'&&<Dashboard storeId={storeId} setTab={setTab}/>} 
+ {tab==='stockin'&&<StockIn storeId={storeId}/>} 
  {tab==='warehouse'&&<Warehouse storeId={storeId} role={profile?.role}/>} 
  {tab==='transfer'&&<Transfer storeId={storeId}/>} 
  {tab==='opname'&&<Opname storeId={storeId}/>} 
@@ -73,12 +74,14 @@ function Dashboard({storeId,setTab}){
   <div className="panel recent"><div className="panel-head"><div><h3>Aktivitas terbaru</h3><span>Transaksi terakhir yang masuk</span></div><button className="linkbtn" onClick={()=>setTab('history')}>Riwayat →</button></div>
    {recent.length===0?<div className="empty">Belum ada transaksi.</div>:<div className="recent-list">{recent.map(r=><div className="recent-row" key={r.id}><div className={'activity-icon '+(Number(r.qty)>=0?'in':'out')}>{Number(r.qty)>=0?'↑':'↓'}</div><div><b>{r.products?.name||'Produk'}</b><small>{r.transaction_type.replaceAll('_',' ')} · {r.note||'Tanpa catatan'}</small></div><strong className={Number(r.qty)>=0?'positive':'negative'}>{Number(r.qty)>0?'+':''}{fmt(r.qty)}</strong><time>{new Date(r.created_at).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</time></div>)}</div>}
   </div>
-  <div className="quick-actions"><button onClick={()=>setTab('transfer')}>＋ Transfer Stok</button><button onClick={()=>setTab('opname')} className="secondary">＋ Input Sisa</button><button onClick={()=>setTab('warehouse')} className="secondary">▣ Cek Stok</button></div>
+  <div className="quick-actions"><button onClick={()=>setTab('stockin')}>＋ Input Stok Gudang</button><button onClick={()=>setTab('transfer')}>＋ Transfer Stok</button><button onClick={()=>setTab('opname')} className="secondary">＋ Input Sisa</button><button onClick={()=>setTab('warehouse')} className="secondary">▣ Cek Stok</button></div>
  </div>
 }
 function Kpi({icon,label,value,meta,danger}){return <div className={'kpi '+(danger?'danger':'')}><div className="kpi-icon">{icon}</div><div><span>{label}</span><b>{value}</b><small>{meta}</small></div></div>}
 function Stat({title,value}){return <div className="stat"><span>{title}</span><b>{value}</b></div>}
 function Action({title,text,onClick}){return <button className="tile action" onClick={onClick}><b>{title}</b><span>{text}</span><em>Buka →</em></button>}
+
+function StockIn({storeId}){const {items,loading,reload}=useStock(storeId);const [productId,setProductId]=useState(''),[qty,setQty]=useState(''),[note,setNote]=useState(''),[saving,setSaving]=useState(false),[msg,setMsg]=useState('');const selected=items.find(x=>x.id===productId);async function submit(e){e.preventDefault();setSaving(true);setMsg('');const amount=Number(qty);if(!Number.isFinite(amount)||amount<=0){setMsg('Jumlah stok harus lebih dari 0.');setSaving(false);return}const {error}=await supabase.rpc('record_stock_in',{p_store_id:storeId,p_product_id:productId,p_qty:amount,p_note:note||null});if(error)setMsg(error.message);else{setMsg('Stok gudang berhasil ditambahkan.');setQty('');setNote('');await reload()}setSaving(false)}return <Page title="Input Stok Gudang" subtitle="Tambah stok masuk ke gudang"><form className="card form" onSubmit={submit}><label>Produk<select value={productId} onChange={e=>setProductId(e.target.value)} required><option value="">Pilih produk</option>{items.map(x=><option key={x.id} value={x.id}>{x.name} — gudang {fmt(x.gudang_qty)} {x.unit}</option>)}</select></label>{selected&&<div className="hint">Stok gudang saat ini: <b>{fmt(selected.gudang_qty)} {selected.unit}</b></div>}<label>Jumlah stok masuk<input type="number" min="0.001" step="0.001" value={qty} onChange={e=>setQty(e.target.value)} required placeholder="Contoh: 10"/></label><label>Catatan<input value={note} onChange={e=>setNote(e.target.value)} placeholder="Contoh: Penerimaan supplier"/></label><button disabled={saving||loading}>{saving?'Menyimpan…':'＋ Tambah Stok Gudang'}</button>{msg&&<div className={msg.includes('berhasil')?'success':'error'}>{msg}</div>}</form></Page>}
 
 function Warehouse({storeId,role}){const {items,loading,error}=useStock(storeId);return <Page title="Stok Gudang" subtitle="Saldo stok terkini"><div className="table-wrap">{loading?<p>Memuat stok…</p>:error?<div className="error">{error}</div>:<table><thead><tr><th>Produk</th><th>Satuan</th><th>Gudang</th><th>Operasional</th><th>Status</th></tr></thead><tbody>{items.map(x=><tr key={x.id}><td><b>{x.name}</b><small>{x.code}</small></td><td>{x.unit}</td><td>{fmt(x.gudang_qty)}</td><td>{fmt(x.operasional_qty)}</td><td><Status item={x}/></td></tr>)}</tbody></table>}</div>{role&&<div className="notice">Role aktif: {role}</div>}</Page>}
 function Status({item}){if(item.gudang_qty<=Number(item.min_stock||0))return <span className="badge danger">Menipis</span>;if(item.max_stock&&item.gudang_qty>=Number(item.max_stock))return <span className="badge warn">Penuh</span>;return <span className="badge ok">Normal</span>}
