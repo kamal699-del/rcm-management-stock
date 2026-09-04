@@ -18,3 +18,11 @@ Install and run:
 `npm run dev`
 
 Important: login accounts are managed by Supabase Auth. The User/Role screen manages the corresponding public profile after the account exists.
+
+
+## RCM V7 — Simple Crew Mode
+- Crew hanya melihat 3 menu: Stok, Input Sisa, Riwayat Saya.
+- Crew tidak dapat mengakses Input Stok Gudang, Transfer, Revisi, Master Produk, atau User/Role.
+- Input Sisa dibuat mobile-first dengan alur pilih produk → masukkan sisa → simpan.
+- Riwayat Crew hanya menampilkan transaksi yang dibuat oleh akun Crew tersebut.
+- Database juga membatasi RPC Transfer agar Crew tidak dapat menjalankan transfer langsung.
