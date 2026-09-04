@@ -38,3 +38,9 @@ Important: login accounts are managed by Supabase Auth. The User/Role screen man
 - Transfer Gudang → Operasional sekarang memilih tujuan Kasir atau Kitchen.
 - Input Sisa tetap dilakukan per area, tetapi kontrol stok utama/status menggunakan total gabungan.
 - Detail saldo area tetap tersimpan untuk audit dan pengendalian.
+
+## V10 / V0.7 – PWA & Icon Pintasan Chrome
+- Tambah favicon dan icon aplikasi RCM.
+- Tambah `manifest.webmanifest` agar RCM dapat dipasang sebagai aplikasi dari Chrome Android.
+- Shortcut menggunakan nama **RCM Stock** dan mode `standalone`.
+- Tambah Apple Touch Icon untuk perangkat yang mendukungnya.
