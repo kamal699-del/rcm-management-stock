@@ -1,0 +1,115 @@
+'use client';
+import {useEffect,useMemo,useState} from 'react';
+import {supabase} from '../lib/supabase';
+
+const menu=[['dashboard','Dashboard'],['stockin','Input Stok Gudang'],['warehouse','Stok Gudang'],['transfer','Transfer'],['opname','Input Sisa'],['history','Riwayat'],['products','Master Produk'],['users','User / Role']];
+const fmt=(n)=>Number(n||0).toLocaleString('id-ID',{maximumFractionDigits:3});
+
+export default function Home(){
+ const [session,setSession]=useState(null),[profile,setProfile]=useState(null),[tab,setTab]=useState('dashboard'),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[busy,setBusy]=useState(false),[msg,setMsg]=useState('');
+ useEffect(()=>{let mounted=true; supabase.auth.getSession().then(({data})=>mounted&&setSession(data.session)); const {data}=supabase.auth.onAuthStateChange((_e,s)=>setSession(s)); return()=>{mounted=false;data.subscription.unsubscribe()};},[]);
+ useEffect(()=>{if(!session){setProfile(null);return} loadProfile();},[session]);
+ async function loadProfile(){const {data,error}=await supabase.from('profiles').select('full_name,role,store_id,stores(name,code)').eq('id',session.user.id).single(); if(error)setMsg(error.message); else setProfile(data)}
+ async function login(e){e.preventDefault();setBusy(true);setMsg('');const {error}=await supabase.auth.signInWithPassword({email,password});if(error)setMsg(error.message);setBusy(false)}
+ async function logout(){await supabase.auth.signOut();setTab('dashboard')}
+ if(!session)return <Login email={email} password={password} setEmail={setEmail} setPassword={setPassword} login={login} busy={busy} msg={msg}/>;
+ const storeId=profile?.store_id;
+ return <div className="shell"><aside><div className="sidebrand"><b>RCM</b><span>Management Stock</span></div><nav>{menu.map(([id,label])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}>{label}</button>)}</nav><button className="logout" onClick={logout}>Keluar</button></aside><main className="content"><header><div><small>STORE</small><h2>{profile?.stores?.name||'LC Rancamanyar'}</h2></div><div className="user">{profile?.full_name||session.user.email}<small>{profile?.role||'crew'}</small></div></header>{msg&&<div className="error top-error">{msg}</div>}<section>
+ {tab==='dashboard'&&<Dashboard storeId={storeId} setTab={setTab}/>} 
+ {tab==='stockin'&&<StockIn storeId={storeId}/>} 
+ {tab==='warehouse'&&<Warehouse storeId={storeId} role={profile?.role}/>} 
+ {tab==='transfer'&&<Transfer storeId={storeId}/>} 
+ {tab==='opname'&&<Opname storeId={storeId}/>} 
+ {tab==='history'&&<History storeId={storeId}/>}
+ {tab==='products'&&profile?.role==='admin'&&<Products/>}
+ {tab==='users'&&profile?.role==='admin'&&<Users/>}
+ {(['products','users'].includes(tab)&&profile?.role!=='admin')&&<Page title="Akses Ditolak" subtitle="Menu ini hanya untuk Admin"><div className="notice">Hanya Admin yang dapat mengelola master produk dan user/role.</div></Page>} 
+ </section></main></div>
+}
+function Login({email,password,setEmail,setPassword,login,busy,msg}){return <main className="login"><div className="brand"><div className="logo">RCM</div><h1>Management Stock</h1><p>LC Rancamanyar</p><form onSubmit={login} className="card"><label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label><label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} required/></label><button disabled={busy}>{busy?'Memproses…':'Masuk'}</button>{msg&&<div className="error">{msg}</div>}</form></div></main>}
+
+function useStock(storeId){
+ const [rows,setRows]=useState([]),[products,setProducts]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState('');
+ async function load(){if(!storeId)return;setLoading(true);const [{data:b,error:be},{data:p,error:pe}]=await Promise.all([supabase.from('stock_balances').select('*').eq('store_id',storeId),supabase.from('products').select('id,code,name,category,unit,min_stock,max_stock').eq('active',true).order('name')]);if(be||pe)setError((be||pe).message);setRows(b||[]);setProducts(p||[]);setLoading(false)}
+ useEffect(()=>{load()},[storeId]);
+ useEffect(()=>{if(!storeId)return;const channel=supabase.channel('rcm-stock-'+storeId).on('postgres_changes',{event:'*',schema:'public',table:'stock_transactions',filter:'store_id=eq.'+storeId},load).subscribe();return()=>supabase.removeChannel(channel)},[storeId]);
+ const merged=useMemo(()=>products.map(p=>{const b=rows.find(x=>x.product_id===p.id)||{};return {...p,gudang_qty:Number(b.gudang_qty||0),operasional_qty:Number(b.operasional_qty||0)}}),[products,rows]);
+ return {items:merged,loading,error,reload:load};
+}
+
+function Dashboard({storeId,setTab}){
+ const {items,loading,error}=useStock(storeId);
+ const [summary,setSummary]=useState({transfer_transactions:0,waste_transactions:0,waste_qty:0,adjustment_qty:0});
+ const [recent,setRecent]=useState([]);
+ useEffect(()=>{if(!storeId)return; let live=true;
+  async function load(){
+   const [{data:s},{data:t}]=await Promise.all([
+    supabase.from('leader_transfer_summary').select('*').eq('store_id',storeId).maybeSingle(),
+    supabase.from('stock_transactions').select('id,transaction_type,qty,note,created_at,products(name,unit)').eq('store_id',storeId).order('created_at',{ascending:false}).limit(6)
+   ]);
+   if(live){setSummary(s||{});setRecent(t||[])}
+  }
+  load();
+  const ch=supabase.channel('rcm-dashboard-'+storeId).on('postgres_changes',{event:'*',schema:'public',table:'stock_transactions',filter:'store_id=eq.'+storeId},load).subscribe();
+  return()=>{live=false;supabase.removeChannel(ch)};
+ },[storeId]);
+ const low=items.filter(x=>x.operasional_qty<=Number(x.min_stock||0));
+ const totalG=items.reduce((s,x)=>s+x.gudang_qty,0); const totalO=items.reduce((s,x)=>s+x.operasional_qty,0);
+ const totalItems=items.length;
+ return <div className="leader-dashboard">
+  <div className="dash-head"><div><span className="eyebrow">DASHBOARD LEADER</span><h1>Kontrol operasional hari ini</h1><p>Ringkasan stok LC Rancamanyar dalam satu layar.</p></div><button className="refresh" onClick={()=>location.reload()}>↻ Refresh</button></div>
+  {error&&<div className="error">{error}</div>}
+  <div className="kpi-grid">
+   <Kpi icon="▣" label="Stok Gudang" value={loading?'…':fmt(totalG)} meta="Total saldo gudang"/>
+   <Kpi icon="▤" label="Stok Operasional" value={loading?'…':fmt(totalO)} meta="Total saldo operasional"/>
+   <Kpi icon="!" label="Stok Menipis" value={loading?'…':low.length} meta={low.length?'Perlu segera dicek':'Semua aman' } danger={low.length>0}/>
+   <Kpi icon="↗" label="Transfer" value={fmt(summary.transfer_transactions)} meta="Transaksi transfer"/>
+  </div>
+  <div className="dash-grid">
+   <div className="panel critical"><div className="panel-head"><div><h3>⚠ Produk perlu perhatian</h3><span>{low.length} produk di bawah / sama dengan minimum</span></div><button className="linkbtn" onClick={()=>setTab('warehouse')}>Lihat semua</button></div>
+    {low.length===0?<div className="empty">Tidak ada produk kritis. 👍</div>:<div className="critical-list">{low.slice(0,6).map(x=><div className="critical-row" key={x.id}><div><b>{x.name}</b><small>{x.code} · Min {fmt(x.min_stock)} {x.unit}</small></div><strong>{fmt(x.operasional_qty)} {x.unit}</strong></div>)}</div>}
+   </div>
+   <div className="panel"><div className="panel-head"><div><h3>Ringkasan aktivitas</h3><span>Pergerakan stok tercatat</span></div></div><div className="activity-stats"><div><span>Waste</span><b>{fmt(summary.waste_qty)}</b><small>{fmt(summary.waste_transactions)} transaksi</small></div><div><span>Adjustment</span><b>{fmt(summary.adjustment_qty)}</b><small>Selisih stok</small></div><div><span>Produk Aktif</span><b>{totalItems}</b><small>Master produk</small></div></div></div>
+  </div>
+  <div className="panel recent"><div className="panel-head"><div><h3>Aktivitas terbaru</h3><span>Transaksi terakhir yang masuk</span></div><button className="linkbtn" onClick={()=>setTab('history')}>Riwayat →</button></div>
+   {recent.length===0?<div className="empty">Belum ada transaksi.</div>:<div className="recent-list">{recent.map(r=><div className="recent-row" key={r.id}><div className={'activity-icon '+(Number(r.qty)>=0?'in':'out')}>{Number(r.qty)>=0?'↑':'↓'}</div><div><b>{r.products?.name||'Produk'}</b><small>{r.transaction_type.replaceAll('_',' ')} · {r.note||'Tanpa catatan'}</small></div><strong className={Number(r.qty)>=0?'positive':'negative'}>{Number(r.qty)>0?'+':''}{fmt(r.qty)}</strong><time>{new Date(r.created_at).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</time></div>)}</div>}
+  </div>
+  <div className="quick-actions"><button onClick={()=>setTab('stockin')}>＋ Input Stok Gudang</button><button onClick={()=>setTab('transfer')}>＋ Transfer Stok</button><button onClick={()=>setTab('opname')} className="secondary">＋ Input Sisa</button><button onClick={()=>setTab('warehouse')} className="secondary">▣ Cek Stok</button></div>
+ </div>
+}
+function Kpi({icon,label,value,meta,danger}){return <div className={'kpi '+(danger?'danger':'')}><div className="kpi-icon">{icon}</div><div><span>{label}</span><b>{value}</b><small>{meta}</small></div></div>}
+function Stat({title,value}){return <div className="stat"><span>{title}</span><b>{value}</b></div>}
+function Action({title,text,onClick}){return <button className="tile action" onClick={onClick}><b>{title}</b><span>{text}</span><em>Buka →</em></button>}
+
+function StockIn({storeId}){const {items,loading,reload}=useStock(storeId);const [productId,setProductId]=useState(''),[qty,setQty]=useState(''),[note,setNote]=useState(''),[saving,setSaving]=useState(false),[msg,setMsg]=useState('');const selected=items.find(x=>x.id===productId);async function submit(e){e.preventDefault();setSaving(true);setMsg('');const amount=Number(qty);if(!Number.isFinite(amount)||amount<=0){setMsg('Jumlah stok harus lebih dari 0.');setSaving(false);return}const {error}=await supabase.rpc('record_stock_in',{p_store_id:storeId,p_product_id:productId,p_qty:amount,p_note:note||null});if(error)setMsg(error.message);else{setMsg('Stok gudang berhasil ditambahkan.');setQty('');setNote('');await reload()}setSaving(false)}return <Page title="Input Stok Gudang" subtitle="Tambah stok masuk ke gudang"><form className="card form" onSubmit={submit}><label>Produk<select value={productId} onChange={e=>setProductId(e.target.value)} required><option value="">Pilih produk</option>{items.map(x=><option key={x.id} value={x.id}>{x.name} — gudang {fmt(x.gudang_qty)} {x.unit}</option>)}</select></label>{selected&&<div className="hint">Stok gudang saat ini: <b>{fmt(selected.gudang_qty)} {selected.unit}</b></div>}<label>Jumlah stok masuk<input type="number" min="0.001" step="0.001" value={qty} onChange={e=>setQty(e.target.value)} required placeholder="Contoh: 10"/></label><label>Catatan<input value={note} onChange={e=>setNote(e.target.value)} placeholder="Contoh: Penerimaan supplier"/></label><button disabled={saving||loading}>{saving?'Menyimpan…':'＋ Tambah Stok Gudang'}</button>{msg&&<div className={msg.includes('berhasil')?'success':'error'}>{msg}</div>}</form></Page>}
+
+function Warehouse({storeId,role}){const {items,loading,error}=useStock(storeId);return <Page title="Stok Gudang" subtitle="Saldo stok terkini"><div className="table-wrap">{loading?<p>Memuat stok…</p>:error?<div className="error">{error}</div>:<table><thead><tr><th>Produk</th><th>Satuan</th><th>Gudang</th><th>Operasional</th><th>Status</th></tr></thead><tbody>{items.map(x=><tr key={x.id}><td><b>{x.name}</b><small>{x.code}</small></td><td>{x.unit}</td><td>{fmt(x.gudang_qty)}</td><td>{fmt(x.operasional_qty)}</td><td><Status item={x}/></td></tr>)}</tbody></table>}</div>{role&&<div className="notice">Role aktif: {role}</div>}</Page>}
+function Status({item}){if(item.gudang_qty<=Number(item.min_stock||0))return <span className="badge danger">Menipis</span>;if(item.max_stock&&item.gudang_qty>=Number(item.max_stock))return <span className="badge warn">Penuh</span>;return <span className="badge ok">Normal</span>}
+
+function Transfer({storeId}){const {items,loading,reload}=useStock(storeId);const [productId,setProductId]=useState(''),[qty,setQty]=useState(''),[note,setNote]=useState(''),[saving,setSaving]=useState(false),[msg,setMsg]=useState('');const selected=items.find(x=>x.id===productId);async function submit(e){e.preventDefault();setSaving(true);setMsg('');const {data,error}=await supabase.rpc('record_stock_transfer',{p_store_id:storeId,p_product_id:productId,p_qty:Number(qty),p_note:note||null});if(error)setMsg(error.message);else{setMsg('Transfer berhasil.');setQty('');setNote('');await reload()}setSaving(false)}return <Page title="Transfer" subtitle="Gudang → Operasional"><form className="card form" onSubmit={submit}><label>Produk<select value={productId} onChange={e=>setProductId(e.target.value)} required><option value="">Pilih produk</option>{items.map(x=><option key={x.id} value={x.id}>{x.name} — gudang {fmt(x.gudang_qty)} {x.unit}</option>)}</select></label><label>Jumlah<input type="number" min="0.001" step="0.001" value={qty} onChange={e=>setQty(e.target.value)} required/></label>{selected&&<div className="hint">Stok gudang tersedia: <b>{fmt(selected.gudang_qty)} {selected.unit}</b></div>}<label>Catatan<input value={note} onChange={e=>setNote(e.target.value)} placeholder="Opsional"/></label><button disabled={saving||loading}>{saving?'Menyimpan…':'Transfer Stok'}</button>{msg&&<div className={msg.includes('berhasil')?'success':'error'}>{msg}</div>}</form></Page>}
+
+function Opname({storeId}){const {items,loading,reload}=useStock(storeId);const [productId,setProductId]=useState(''),[physical,setPhysical]=useState(''),[waste,setWaste]=useState('0'),[note,setNote]=useState(''),[saving,setSaving]=useState(false),[result,setResult]=useState(null),[msg,setMsg]=useState('');const selected=items.find(x=>x.id===productId);async function submit(e){e.preventDefault();setSaving(true);setMsg('');setResult(null);const {data,error}=await supabase.rpc('record_operational_opname',{p_store_id:storeId,p_product_id:productId,p_physical_stock:Number(physical),p_waste_qty:Number(waste||0),p_note:note||null});if(error)setMsg(error.message);else{setResult(data);setPhysical('');setWaste('0');setNote('');await reload()}setSaving(false)}return <Page title="Input Sisa" subtitle="Opname stok operasional"><form className="card form" onSubmit={submit}><label>Produk<select value={productId} onChange={e=>setProductId(e.target.value)} required><option value="">Pilih produk</option>{items.map(x=><option key={x.id} value={x.id}>{x.name} — sistem {fmt(x.operasional_qty)} {x.unit}</option>)}</select></label>{selected&&<div className="hint">Stok sistem: <b>{fmt(selected.operasional_qty)} {selected.unit}</b></div>}<label>Sisa fisik<input type="number" min="0" step="0.001" value={physical} onChange={e=>setPhysical(e.target.value)} required/></label><label>Waste<input type="number" min="0" step="0.001" value={waste} onChange={e=>setWaste(e.target.value)}/></label><label>Catatan<input value={note} onChange={e=>setNote(e.target.value)} placeholder="Opsional"/></label><button disabled={saving||loading}>{saving?'Menyimpan…':'Simpan Opname'}</button>{msg&&<div className="error">{msg}</div>}{result&&<div className="result"><b>Opname tersimpan</b><div>Pemakaian: {fmt(result.usage_qty)}</div><div>Waste: {fmt(result.waste_qty)}</div><div>Surplus: {fmt(result.surplus_qty)}</div></div>}</form></Page>}
+
+function History({storeId}){const [rows,setRows]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState('');async function load(){if(!storeId)return;setLoading(true);const {data,error}=await supabase.from('stock_transactions').select('id,product_id,area,transaction_type,qty,note,created_at,products(name,unit),profiles(full_name)').eq('store_id',storeId).order('created_at',{ascending:false}).limit(50);if(error)setError(error.message);setRows(data||[]);setLoading(false)}useEffect(()=>{load()},[storeId]);useEffect(()=>{if(!storeId)return;const channel=supabase.channel('rcm-history-'+storeId).on('postgres_changes',{event:'INSERT',schema:'public',table:'stock_transactions',filter:'store_id=eq.'+storeId},load).subscribe();return()=>supabase.removeChannel(channel)},[storeId]);return <Page title="Riwayat" subtitle="50 transaksi terbaru"><div className="history">{loading?<p>Memuat riwayat…</p>:error?<div className="error">{error}</div>:rows.length===0?<p>Belum ada transaksi.</p>:rows.map(r=><div className="history-row" key={r.id}><div><b>{r.products?.name||'Produk'}</b><small>{r.transaction_type} · {r.area}</small></div><strong className={Number(r.qty)<0?'negative':'positive'}>{Number(r.qty)>0?'+':''}{fmt(r.qty)} {r.products?.unit||''}</strong><time>{new Date(r.created_at).toLocaleString('id-ID')}</time></div>)}</div></Page>}
+function Page({title,subtitle,children}){return <div className="page"><div className="page-title"><div><h1>{title}</h1><p>{subtitle}</p></div></div>{children}</div>}
+
+function Products(){
+ const [rows,setRows]=useState([]),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[error,setError]=useState('');
+ const blank={id:null,code:'',name:'',category:'',unit:'pcs',min_stock:0,max_stock:0,active:true};
+ const [form,setForm]=useState(blank);
+ async function load(){setLoading(true);const {data,error}=await supabase.from('products').select('*').order('name');if(error)setError(error.message);setRows(data||[]);setLoading(false)}
+ useEffect(()=>{load()},[]);
+ function edit(r){setForm({...r})}
+ function reset(){setForm(blank)}
+ async function save(e){e.preventDefault();setSaving(true);setError('');const payload={code:form.code.trim(),name:form.name.trim(),category:form.category.trim()||null,unit:form.unit.trim()||'pcs',min_stock:Number(form.min_stock||0),max_stock:Number(form.max_stock||0),active:!!form.active};let q=form.id?supabase.from('products').update(payload).eq('id',form.id):supabase.from('products').insert(payload);const {error}=await q;if(error)setError(error.message);else{reset();await load()}setSaving(false)}
+ async function toggle(r){const {error}=await supabase.from('products').update({active:!r.active}).eq('id',r.id);if(error)setError(error.message);else load()}
+ return <Page title="Master Produk" subtitle="Kelola produk, satuan dan batas stok"><div className="split"><form className="card form" onSubmit={save}><h3>{form.id?'Edit Produk':'Tambah Produk'}</h3><label>Kode Produk<input value={form.code} onChange={e=>setForm({...form,code:e.target.value})} required/></label><label>Nama Produk<input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} required/></label><label>Kategori<input value={form.category||''} onChange={e=>setForm({...form,category:e.target.value})}/></label><label>Satuan<input value={form.unit} onChange={e=>setForm({...form,unit:e.target.value})} required/></label><div className="two"><label>Min Stock<input type="number" min="0" step="0.001" value={form.min_stock} onChange={e=>setForm({...form,min_stock:e.target.value})}/></label><label>Max Stock<input type="number" min="0" step="0.001" value={form.max_stock} onChange={e=>setForm({...form,max_stock:e.target.value})}/></label></div><label className="check"><input type="checkbox" checked={!!form.active} onChange={e=>setForm({...form,active:e.target.checked})}/> Produk aktif</label><div className="actions"><button disabled={saving}>{saving?'Menyimpan…':form.id?'Simpan Perubahan':'Tambah Produk'}</button>{form.id&&<button type="button" className="secondary" onClick={reset}>Batal</button>}</div>{error&&<div className="error">{error}</div>}</form><div className="table-wrap">{loading?<p>Memuat produk…</p>:rows.length===0?<p>Belum ada produk. Tambahkan produk pertama.</p>:<table><thead><tr><th>Produk</th><th>Kategori</th><th>Satuan</th><th>Min/Max</th><th>Status</th><th></th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td><b>{r.name}</b><small>{r.code}</small></td><td>{r.category||'-'}</td><td>{r.unit}</td><td>{fmt(r.min_stock)} / {fmt(r.max_stock)}</td><td>{r.active?<span className="badge ok">Aktif</span>:<span className="badge danger">Nonaktif</span>}</td><td><button className="smallbtn" onClick={()=>edit(r)}>Edit</button><button className="smallbtn" onClick={()=>toggle(r)}>{r.active?'Nonaktifkan':'Aktifkan'}</button></td></tr>)}</tbody></table>}</div></div></Page>
+}
+
+function Users(){
+ const [rows,setRows]=useState([]),[stores,setStores]=useState([]),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[error,setError]=useState('');
+ async function load(){setLoading(true);const [{data:u,error:ue},{data:s,error:se}]=await Promise.all([supabase.from('profiles').select('id,full_name,role,store_id,active,created_at,stores(name,code)').order('full_name'),supabase.from('stores').select('id,name,code').eq('active',true).order('name')]);if(ue||se)setError((ue||se).message);setRows(u||[]);setStores(s||[]);setLoading(false)}
+ useEffect(()=>{load()},[]);
+ async function update(id,patch){setSaving(true);setError('');const {error}=await supabase.from('profiles').update(patch).eq('id',id);if(error)setError(error.message);else await load();setSaving(false)}
+ return <Page title="User / Role" subtitle="Kelola role, store dan status pengguna"><div className="notice">Akun login dibuat melalui Supabase Auth. Di sini Admin mengatur profil, role, store dan status aktif pengguna.</div><div className="table-wrap">{loading?<p>Memuat pengguna…</p>:rows.length===0?<p>Belum ada profil pengguna.</p>:<table><thead><tr><th>Pengguna</th><th>Role</th><th>Store</th><th>Status</th><th>Aksi</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td><b>{r.full_name||'Tanpa Nama'}</b><small>{r.id.slice(0,8)}…</small></td><td><select value={r.role} disabled={saving} onChange={e=>update(r.id,{role:e.target.value})}><option value="admin">Admin</option><option value="store_leader">Store Leader</option><option value="team_leader">Team Leader</option><option value="crew">Crew</option></select></td><td><select value={r.store_id||''} disabled={saving} onChange={e=>update(r.id,{store_id:e.target.value||null})}><option value="">-</option>{stores.map(st=><option key={st.id} value={st.id}>{st.name}</option>)}</select></td><td>{r.active?<span className="badge ok">Aktif</span>:<span className="badge danger">Nonaktif</span>}</td><td><button className="smallbtn" disabled={saving} onClick={()=>update(r.id,{active:!r.active})}>{r.active?'Nonaktifkan':'Aktifkan'}</button></td></tr>)}</tbody></table>}{error&&<div className="error">{error}</div>}</div></Page>
+}
