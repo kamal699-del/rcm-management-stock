@@ -44,3 +44,10 @@ Important: login accounts are managed by Supabase Auth. The User/Role screen man
 - Tambah `manifest.webmanifest` agar RCM dapat dipasang sebagai aplikasi dari Chrome Android.
 - Shortcut menggunakan nama **RCM Stock** dan mode `standalone`.
 - Tambah Apple Touch Icon untuk perangkat yang mendukungnya.
+
+
+## V11 / V0.7 – Pilihan Satuan Produk
+- Satuan produk dibatasi ke `gr`, `kg`, atau `pcs`.
+- Revisi Stok Gudang sekarang dapat sekaligus mengubah satuan produk.
+- Master Produk menggunakan dropdown satuan yang sama.
+- Perubahan satuan tidak mengubah angka stok otomatis; sesuaikan jumlah stok pada form revisi bila diperlukan.
