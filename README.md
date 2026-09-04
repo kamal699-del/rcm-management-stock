@@ -26,3 +26,15 @@ Important: login accounts are managed by Supabase Auth. The User/Role screen man
 - Input Sisa dibuat mobile-first dengan alur pilih produk → masukkan sisa → simpan.
 - Riwayat Crew hanya menampilkan transaksi yang dibuat oleh akun Crew tersebut.
 - Database juga membatasi RPC Transfer agar Crew tidak dapat menjalankan transfer langsung.
+
+## V8 – Area Opname Operasional
+- Tambah pilihan Area Operasional pada Input Sisa: Kasir / Kitchen.
+- Area opname tersimpan di `stock_opnames.operational_area`.
+- RPC `record_operational_opname` menerima parameter `p_operational_area`.
+
+
+## V9 / V0.6 – Total Operasional Gabungan
+- Total stok operasional ditampilkan sebagai satu saldo gabungan Kasir + Kitchen.
+- Transfer Gudang → Operasional sekarang memilih tujuan Kasir atau Kitchen.
+- Input Sisa tetap dilakukan per area, tetapi kontrol stok utama/status menggunakan total gabungan.
+- Detail saldo area tetap tersimpan untuk audit dan pengendalian.
