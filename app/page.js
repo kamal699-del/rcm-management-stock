@@ -16,10 +16,11 @@ export default function Home(){
  if(!session)return <Login email={email} password={password} setEmail={setEmail} setPassword={setPassword} login={login} busy={busy} msg={msg}/>;
  const storeId=profile?.store_id;
  const isCrew=profile?.role==='crew';
- const crewMenu=[['crew-stock','Stok'],['crew-opname','Input Sisa'],['crew-history','Riwayat Saya']];
+ const crewMenu=[['crew-stock','Stok'],['transfer','Transfer'],['crew-opname','Input Sisa'],['crew-history','Riwayat Saya']];
  const leaderMenu=[...baseMenu.slice(0,3),...(canRevise(profile?.role)?[['revise','Revisi Stok Gudang']]:[]),...baseMenu.slice(3)];
  return <div className={'shell '+(isCrew?'crew-shell':'')}><aside><div className="sidebrand"><b>RCM</b><span>Management Stock</span></div><nav>{(isCrew?crewMenu:leaderMenu).map(([id,label])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}>{label}</button>)}</nav><button className="logout" onClick={logout}>Keluar</button></aside><main className="content"><header><div><small>STORE</small><h2>{profile?.stores?.name||'LC Rancamanyar'}</h2></div><div className="user">{profile?.full_name||session.user.email}<small>{profile?.role||'crew'}</small></div></header>{msg&&<div className="error top-error">{msg}</div>}<section>
  {isCrew&&tab==='crew-stock'&&<CrewStock storeId={storeId}/>} 
+ {isCrew&&tab==='transfer'&&<Transfer storeId={storeId}/>} 
  {isCrew&&tab==='crew-opname'&&<CrewOpname storeId={storeId}/>} 
  {isCrew&&tab==='crew-history'&&<MyHistory storeId={storeId}/>} 
  {!isCrew&&tab==='dashboard'&&<Dashboard storeId={storeId} setTab={setTab}/>} 
