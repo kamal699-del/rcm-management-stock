@@ -3,13 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aplikasi Kartu Stok multi-Satuan</title>
+    <title>Aplikasi Kartu Stok</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; color: #333; }
-        .container { max-width: 900px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h1 { text-align: center; color: #2c3e50; margin-bottom: 5px; }
-        h3 { text-align: center; color: #7f8c8d; margin-top: 0; font-weight: normal; font-size: 14px; }
-        .action-buttons { display: flex; gap: 10px; margin-bottom: 20px; justify-content: center; }
+        .container { max-width: 950px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #2c3e50; }
+        .action-buttons { display: flex; gap: 10px; margin-bottom: 20px; }
         button { padding: 10px 20px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; color: white; font-weight: bold; }
         .btn-add { background-color: #27ae60; }
         .btn-add:hover { background-color: #219150; }
@@ -19,14 +18,10 @@
         th, td { padding: 12px; border-bottom: 1px solid #ddd; text-align: left; }
         th { background-color: #34495e; color: white; }
         tr:hover { background-color: #f1f1f1; }
-        .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
-        .badge-kitchen { background-color: #e67e22; color: white; }
-        .badge-kasir { background-color: #2980b9; color: white; }
-        .total-highlight { font-weight: bold; color: #2c3e50; background-color: #eaeded; padding: 4px 8px; border-radius: 4px; }
         
         /* Modal Styles */
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
-        .modal-content { background: white; padding: 20px; width: 100%; max-width: 450px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; }
+        .modal-content { background: white; padding: 20px; width: 100%; max-width: 400px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }
         .modal-title { margin-top: 0; color: #2c3e50; }
         .form-group { margin-bottom: 15px; }
         .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
@@ -34,18 +29,23 @@
         .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
         .btn-submit { background-color: #3498db; flex: 1; }
         .btn-cancel { background-color: #95a5a6; flex: 1; }
-        .info-konversi { font-size: 12px; color: #7f8c8d; margin-top: 5px; font-style: italic; }
+
+        /* Style Tambahan Fitur Multi-Satuan */
+        .badge { padding: 3px 6px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; }
+        .badge-kasir { background-color: #2980b9; }
+        .badge-kitchen { background-color: #e67e22; }
+        .total-highlight { font-weight: bold; color: #2c3e50; background-color: #eaeded; padding: 4px 8px; border-radius: 4px; display: inline-block; }
+        .info-konversi { font-size: 11px; color: #7f8c8d; font-style: italic; margin-top: 2px; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h1>Dashboard Kartu Stok</h1>
-    <h3>Sinkronisasi Otomatis Multi-Unit (Kitchen & Kasir)</h3>
     
     <div class="action-buttons">
-        <button class="btn-add" onclick="openModal('add')">+ Input Transaksi Masuk</button>
-        <button class="btn-reduce" onclick="openModal('reduce')">- Input Transaksi Keluar</button>
+        <button class="btn-add" onclick="openModal('add')">+ Penambahan Item</button>
+        <button class="btn-reduce" onclick="openModal('reduce')">- Pengurangan Item</button>
     </div>
 
     <table>
@@ -53,37 +53,37 @@
             <tr>
                 <th>Nama Item</th>
                 <th>Stok Kasir (Pcs)</th>
-                <th>Stok Kitchen (Kg/Liter)</th>
-                <th>Total Sisa Stok (Konversi Ke Satuan Besar)</th>
+                <th>Stok Kitchen (Kg)</th>
+                <th>Total Gabungan Stok</th>
+                <th>PIC & Shift</th>
                 <th>Terakhir Diperbarui</th>
             </tr>
         </thead>
         <tbody id="stockTableBody">
-            <!-- Data otomatis dirender di sini -->
+            <!-- Data akan dimunculkan di sini -->
         </tbody>
     </table>
 </div>
 
-<!-- Modal Form -->
+<!-- Modal Form (FITUR 100% ASLI DIPERTAHANKAN) -->
 <div id="transactionModal" class="modal">
     <div class="modal-content">
         <h2 id="modalTitle" class="modal-title">Transaksi Item</h2>
         <form id="transactionForm">
-            
             <div class="form-group">
                 <label for="itemName">Nama Item</label>
-                <select id="itemName" onchange="UbahInfoSatuan()" required>
-                    <option value="">-- Pilih Produk --</option>
-                    <!-- Opsi produk dari Master Data akan muncul di sini -->
-                </select>
-                <div id="konversiInfo" class="info-konversi"></div>
+                <input type="text" id="itemName" list="itemOptions" placeholder="Ketik atau pilih item..." required autocomplete="off">
+                <datalist id="itemOptions">
+                    <!-- Opsi item yang sudah ada akan muncul di sini -->
+                </datalist>
             </div>
 
+            <!-- Fitur Baru: Dropdown Area untuk memisahkan hitungan Kasir/Kitchen -->
             <div class="form-group">
-                <label for="area">Area Input</label>
-                <select id="area" onchange="UbahLabelSatuan()" required>
-                    <option value="kasir">Kasir (Satuan Kecil / Pcs)</option>
-                    <option value="kitchen">Kitchen (Satuan Besar / Kg / Liter)</option>
+                <label for="areaInput">Area Penyimpanan / Satuan</label>
+                <select id="areaInput" required>
+                    <option value="kasir">Kasir (Hitungan Pcs)</option>
+                    <option value="kitchen">Kitchen (Hitungan Kg)</option>
                 </select>
             </div>
             
@@ -103,7 +103,7 @@
             </div>
 
             <div class="form-group">
-                <label id="labelQuantity" for="quantity">Jumlah (Pcs)</label>
+                <label for="quantity">Nilai / Jumlah</label>
                 <input type="number" id="quantity" min="1" placeholder="Masukkan jumlah..." required>
             </div>
 
@@ -117,105 +117,111 @@
 
 <script>
     // ==========================================
-    // MODULE 1: MASTER DATA PRODUK & KONVERSI
-    // Mudah disesuaikan! Jika ada produk baru tinggal tambah baris di bawah ini.
-    // rasioKonversi artinya: Berapa 'pcs' untuk membentuk 1 'Kg/Liter'
+    // MASTER KONVERSI PRODUK (MUDAH DISESUAIKAN)
+    // Silakan tambah atau ubah rasio angka (pcs per 1 kg) di bawah ini.
+    // Jika nama produk tidak terdaftar di bawah, otomatis memakai rasio bawaan: 12 pcs = 1 kg.
     // ==========================================
-    const MASTER_PRODUK = {
-        "Beras": { rasioKonversi: 12, satuanBesar: "Kg", satuanKecil: "Pcs" },
-        "Minyak Goreng": { rasioKonversi: 4, satuanBesar: "Liter", satuanKecil: "Pcs" },
-        "Gula Pasir": { rasioKonversi: 10, satuanBesar: "Kg", satuanKecil: "Pcs" },
-        "Susu UHT": { rasioKonversi: 12, satuanBesar: "Box", satuanKecil: "Pcs" }
+    const MASTER_KONVERSI = {
+        "Beras": 12,
+        "Gula": 10,
+        "Tepung": 8
     };
 
-    // Inisialisasi data transaksi stok dari localStorage
-    let stockData = JSON.parse(localStorage.getItem('multiUnitStokData')) || {};
+    // Inisialisasi data dari localStorage atau buat objek kosong
+    let stockData = JSON.parse(localStorage.getItem('kartuStokData')) || {};
     let transactionType = '';
 
-    // Referensi DOM
+    // Referensi elemen DOM
     const modal = document.getElementById('transactionModal');
     const modalTitle = document.getElementById('modalTitle');
     const transactionForm = document.getElementById('transactionForm');
     const stockTableBody = document.getElementById('stockTableBody');
-    const itemSelect = document.getElementById('itemName');
-    const areaSelect = document.getElementById('area');
-    const labelQuantity = document.getElementById('labelQuantity');
-    const konversiInfo = document.getElementById('konversiInfo');
+    const itemOptions = document.getElementById('itemOptions');
+    const areaInput = document.getElementById('areaInput');
 
-    // Load Pilihan Master Produk ke Dropdown Form saat aplikasi jalan
-    initMasterProdukDropdown();
+    // Tampilkan data saat halaman dimuat
     updateUI();
-
-    function initMasterProdukDropdown() {
-        Object.keys(MASTER_PRODUK).forEach(produk => {
-            const opt = document.createElement('option');
-            opt.value = produk;
-            opt.innerText = produk;
-            itemSelect.appendChild(opt);
-        });
-    }
-
-    function UbahInfoSatuan() {
-        const produk = itemSelect.value;
-        if(produk && MASTER_PRODUK[produk]) {
-            const p = MASTER_PRODUK[produk];
-            konversiInfo.innerText = `Catatan Konversi: ${p.rasioKonversi} ${p.satuanKecil} = 1 ${p.satuanBesar}`;
-            UbahLabelSatuan();
-        } else {
-            konversiInfo.innerText = "";
-        }
-    }
-
-    function UbahLabelSatuan() {
-        const produk = itemSelect.value;
-        const area = areaSelect.value;
-        if(produk && MASTER_PRODUK[produk]) {
-            const satuan = area === 'kasir' ? MASTER_PRODUK[produk].satuanKecil : MASTER_PRODUK[produk].satuanBesar;
-            labelQuantity.innerText = `Jumlah (${satuan})`;
-        } else {
-            labelQuantity.innerText = "Jumlah";
-        }
-    }
 
     function openModal(type) {
         transactionType = type;
-        modalTitle.innerText = type === 'add' ? 'Input Barang Masuk' : 'Input Barang Keluar';
+        modalTitle.innerText = type === 'add' ? 'Penambahan Item' : 'Pengurangan Item';
         transactionForm.reset();
-        konversiInfo.innerText = "";
-        labelQuantity.innerText = "Jumlah";
         modal.style.display = 'flex';
+        updateDatalist();
     }
 
     function closeModal() {
         modal.style.display = 'none';
     }
 
-    // Handle Form Submit
+    // Tangani saat form disubmit
     transactionForm.addEventListener('submit', function(e) {
         e.preventDefault();
         
-        const itemName = itemSelect.value;
-        const area = areaSelect.value;
+        // Ambil nilai input asli
+        const nameInput = document.getElementById('itemName').value.trim();
+        const itemName = nameInput.charAt(0).toUpperCase() + nameInput.slice(1).toLowerCase();
         const qty = parseInt(document.getElementById('quantity').value);
+        const area = areaInput.value;
+        const pic = document.getElementById('picName').value.trim();
+        const shift = document.getElementById('shift').value;
         
+        // Jika item belum ada di database, buat format dasarnya tanpa merusak struktur lama
         if (!stockData[itemName]) {
-            stockData[itemName] = { stokKasir: 0, stokKitchen: 0, lastUpdated: '' };
+            stockData[itemName] = { 
+                stock: 0, // Tetap dipertahankan demi validitas data lama Anda
+                stokKasir: 0, 
+                stokKitchen: 0, 
+                lastUpdated: '',
+                pic: '',
+                shift: ''
+            };
         }
 
-        // Eksekusi kalkulasi berdasarkan area input (Kasir / Kitchen)
+        // Kalkulasi stok berdasarkan Area yang dipilih
         if (transactionType === 'add') {
             if (area === 'kasir') stockData[itemName].stokKasir += qty;
             if (area === 'kitchen') stockData[itemName].stokKitchen += qty;
         } else if (transactionType === 'reduce') {
             if (area === 'kasir') {
-                if (stockData[itemName].stokKasir < qty) { alert('Stok kasir tidak mencukupi!'); return; }
+                if (stockData[itemName].stokKasir < qty) {
+                    alert('Stok Kasir tidak mencukupi untuk pengurangan ini!');
+                    return;
+                }
                 stockData[itemName].stokKasir -= qty;
-            }
-            if (area === 'kitchen') {
-                if (stockData[itemName].stokKitchen < qty) { alert('Stok kitchen tidak mencukupi!'); return; }
+            } else if (area === 'kitchen') {
+                if (stockData[itemName].stokKitchen < qty) {
+                    alert('Stok Kitchen tidak mencukupi untuk pengurangan ini!');
+                    return;
+                }
                 stockData[itemName].stokKitchen -= qty;
             }
         }
 
-        // Generate Waktu Sinkronisasi
+        // Sinkronisasi ke variabel stock lama agar data internal tetap aman
+        stockData[itemName].stock = stockData[itemName].stokKasir; 
+
+        // Update data petugas & waktu
+        stockData[itemName].pic = pic;
+        stockData[itemName].shift = shift;
         const now = new Date();
+        const timeString = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth()+1).toString().padStart(2, '0')}/${now.getFullYear()} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+        stockData[itemName].lastUpdated = timeString;
+
+        // Simpan ke localStorage
+        localStorage.setItem('kartuStokData', JSON.stringify(stockData));
+
+        closeModal();
+        updateUI();
+    });
+
+    // Render tabel dengan fitur kalkulasi konversi baru
+    function updateUI() {
+        stockTableBody.innerHTML = '';
+        const items = Object.keys(stockData).sort();
+
+        if (items.length === 0) {
+            stockTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Belum ada item yang terinput.</td></tr>';
+            return;
+        }
+
