@@ -1,167 +1,221 @@
-'use client';
-import {useEffect,useMemo,useState} from 'react';
-import {supabase} from '../lib/supabase';
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplikasi Kartu Stok multi-Satuan</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 900px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #2c3e50; margin-bottom: 5px; }
+        h3 { text-align: center; color: #7f8c8d; margin-top: 0; font-weight: normal; font-size: 14px; }
+        .action-buttons { display: flex; gap: 10px; margin-bottom: 20px; justify-content: center; }
+        button { padding: 10px 20px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; color: white; font-weight: bold; }
+        .btn-add { background-color: #27ae60; }
+        .btn-add:hover { background-color: #219150; }
+        .btn-reduce { background-color: #e74c3c; }
+        .btn-reduce:hover { background-color: #c0392b; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 12px; border-bottom: 1px solid #ddd; text-align: left; }
+        th { background-color: #34495e; color: white; }
+        tr:hover { background-color: #f1f1f1; }
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .badge-kitchen { background-color: #e67e22; color: white; }
+        .badge-kasir { background-color: #2980b9; color: white; }
+        .total-highlight { font-weight: bold; color: #2c3e50; background-color: #eaeded; padding: 4px 8px; border-radius: 4px; }
+        
+        /* Modal Styles */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: white; padding: 20px; width: 100%; max-width: 450px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }
+        .modal-title { margin-top: 0; color: #2c3e50; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .form-group input, .form-group select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
+        .btn-submit { background-color: #3498db; flex: 1; }
+        .btn-cancel { background-color: #95a5a6; flex: 1; }
+        .info-konversi { font-size: 12px; color: #7f8c8d; margin-top: 5px; font-style: italic; }
+    </style>
+</head>
+<body>
 
-const baseMenu=[['dashboard','Dashboard'],['stockin','Input Stok Gudang'],['warehouse','Stok Gudang'],['transfer','Transfer'],['opname','Input Sisa'],['history','Riwayat'],['products','Master Produk'],['users','User / Role']];
-const canRevise=(role)=>['admin','store_leader','team_leader'].includes(role);
-const fmt=(n)=>Number(n||0).toLocaleString('id-ID',{maximumFractionDigits:3});
+<div class="container">
+    <h1>Dashboard Kartu Stok</h1>
+    <h3>Sinkronisasi Otomatis Multi-Unit (Kitchen & Kasir)</h3>
+    
+    <div class="action-buttons">
+        <button class="btn-add" onclick="openModal('add')">+ Input Transaksi Masuk</button>
+        <button class="btn-reduce" onclick="openModal('reduce')">- Input Transaksi Keluar</button>
+    </div>
 
-export default function Home(){
- const [session,setSession]=useState(null),[profile,setProfile]=useState(null),[tab,setTab]=useState('dashboard'),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[busy,setBusy]=useState(false),[msg,setMsg]=useState('');
- useEffect(()=>{let mounted=true; supabase.auth.getSession().then(({data})=>mounted&&setSession(data.session)); const {data}=supabase.auth.onAuthStateChange((_e,s)=>setSession(s)); return()=>{mounted=false;data.subscription.unsubscribe()};},[]);
- useEffect(()=>{if(!session){setProfile(null);return} loadProfile();},[session]);
- async function loadProfile(){const {data,error}=await supabase.from('profiles').select('full_name,role,store_id,stores(name,code)').eq('id',session.user.id).single(); if(error)setMsg(error.message); else {setProfile(data);setTab(data.role==='crew'?'crew-stock':'dashboard')}}
- async function login(e){e.preventDefault();setBusy(true);setMsg('');const {error}=await supabase.auth.signInWithPassword({email,password});if(error)setMsg(error.message);setBusy(false)}
- async function logout(){await supabase.auth.signOut();setTab('dashboard')}
- if(!session)return <Login email={email} password={password} setEmail={setEmail} setPassword={setPassword} login={login} busy={busy} msg={msg}/>;
- const storeId=profile?.store_id;
- const isCrew=profile?.role==='crew';
- const crewMenu=[['crew-stock','Stok'],['transfer','Transfer'],['crew-opname','Input Sisa'],['crew-history','Riwayat Saya']];
- const leaderMenu=[...baseMenu.slice(0,3),...(canRevise(profile?.role)?[['revise','Revisi Stok Gudang']]:[]),...baseMenu.slice(3)];
- return <div className={'shell '+(isCrew?'crew-shell':'')}><aside><div className="sidebrand"><b>RCM</b><span>Management Stock</span></div><nav>{(isCrew?crewMenu:leaderMenu).map(([id,label])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}>{label}</button>)}</nav><button className="logout" onClick={logout}>Keluar</button></aside><main className="content"><header><div><small>STORE</small><h2>{profile?.stores?.name||'LC Rancamanyar'}</h2></div><div className="user">{profile?.full_name||session.user.email}<small>{profile?.role||'crew'}</small></div></header>{msg&&<div className="error top-error">{msg}</div>}<section>
- {isCrew&&tab==='crew-stock'&&<CrewStock storeId={storeId}/>} 
- {isCrew&&tab==='transfer'&&<Transfer storeId={storeId}/>} 
- {isCrew&&tab==='crew-opname'&&<CrewOpname storeId={storeId}/>} 
- {isCrew&&tab==='crew-history'&&<MyHistory storeId={storeId}/>} 
- {!isCrew&&tab==='dashboard'&&<Dashboard storeId={storeId} setTab={setTab}/>} 
- {!isCrew&&tab==='stockin'&&<StockIn storeId={storeId}/>} 
- {!isCrew&&tab==='warehouse'&&<Warehouse storeId={storeId} role={profile?.role}/>} 
- {!isCrew&&tab==='revise'&&canRevise(profile?.role)&&<ReviseWarehouseStock storeId={storeId}/>} 
- {!isCrew&&tab==='transfer'&&<Transfer storeId={storeId}/>} 
- {!isCrew&&tab==='opname'&&<Opname storeId={storeId}/>} 
- {!isCrew&&tab==='history'&&<History storeId={storeId}/>}
- {!isCrew&&tab==='products'&&profile?.role==='admin'&&<Products/>}
- {!isCrew&&tab==='users'&&profile?.role==='admin'&&<Users/>}
- </section></main></div>
-}
-function Login({email,password,setEmail,setPassword,login,busy,msg}){return <main className="login"><div className="brand"><div className="logo">RCM</div><h1>Management Stock</h1><p>LC Rancamanyar</p><form onSubmit={login} className="card"><label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label><label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} required/></label><button disabled={busy}>{busy?'Memproses…':'Masuk'}</button>{msg&&<div className="error">{msg}</div>}</form></div></main>}
+    <table>
+        <thead>
+            <tr>
+                <th>Nama Item</th>
+                <th>Stok Kasir (Pcs)</th>
+                <th>Stok Kitchen (Kg/Liter)</th>
+                <th>Total Sisa Stok (Konversi Ke Satuan Besar)</th>
+                <th>Terakhir Diperbarui</th>
+            </tr>
+        </thead>
+        <tbody id="stockTableBody">
+            <!-- Data otomatis dirender di sini -->
+        </tbody>
+    </table>
+</div>
 
-function useStock(storeId){
- const [rows,setRows]=useState([]),[products,setProducts]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState('');
- async function load(){if(!storeId)return;setLoading(true);const [{data:b,error:be},{data:p,error:pe}]=await Promise.all([supabase.from('stock_balances').select('*').eq('store_id',storeId),supabase.from('products').select('id,code,name,category,unit,min_stock,max_stock').eq('active',true).order('name')]);if(be||pe)setError((be||pe).message);setRows(b||[]);setProducts(p||[]);setLoading(false)}
- useEffect(()=>{load()},[storeId]);
- useEffect(()=>{if(!storeId)return;const channel=supabase.channel('rcm-stock-'+storeId).on('postgres_changes',{event:'*',schema:'public',table:'stock_transactions',filter:'store_id=eq.'+storeId},load).subscribe();return()=>supabase.removeChannel(channel)},[storeId]);
- const merged=useMemo(()=>products.map(p=>{const b=rows.find(x=>x.product_id===p.id)||{};return {...p,gudang_qty:Number(b.gudang_qty||0),operasional_qty:Number(b.operasional_qty||0)}}),[products,rows]);
- return {items:merged,loading,error,reload:load};
-}
+<!-- Modal Form -->
+<div id="transactionModal" class="modal">
+    <div class="modal-content">
+        <h2 id="modalTitle" class="modal-title">Transaksi Item</h2>
+        <form id="transactionForm">
+            
+            <div class="form-group">
+                <label for="itemName">Nama Item</label>
+                <select id="itemName" onchange="UbahInfoSatuan()" required>
+                    <option value="">-- Pilih Produk --</option>
+                    <!-- Opsi produk dari Master Data akan muncul di sini -->
+                </select>
+                <div id="konversiInfo" class="info-konversi"></div>
+            </div>
 
-function Dashboard({storeId,setTab}){
- const {items,loading,error}=useStock(storeId);
- const [summary,setSummary]=useState({transfer_transactions:0,waste_transactions:0,waste_qty:0,adjustment_qty:0});
- const [recent,setRecent]=useState([]);
- useEffect(()=>{if(!storeId)return; let live=true;
-  async function load(){
-   const [{data:s},{data:t}]=await Promise.all([
-    supabase.from('leader_transfer_summary').select('*').eq('store_id',storeId).maybeSingle(),
-    supabase.from('stock_transactions').select('id,transaction_type,qty,note,created_at,products(name,unit)').eq('store_id',storeId).order('created_at',{ascending:false}).limit(6)
-   ]);
-   if(live){setSummary(s||{});setRecent(t||[])}
-  }
-  load();
-  const ch=supabase.channel('rcm-dashboard-'+storeId).on('postgres_changes',{event:'*',schema:'public',table:'stock_transactions',filter:'store_id=eq.'+storeId},load).subscribe();
-  return()=>{live=false;supabase.removeChannel(ch)};
- },[storeId]);
- const low=items.filter(x=>x.operasional_qty<=Number(x.min_stock||0));
- const totalG=items.reduce((s,x)=>s+x.gudang_qty,0); const totalO=items.reduce((s,x)=>s+x.operasional_qty,0);
- const totalItems=items.length;
- return <div className="leader-dashboard">
-  <div className="dash-head"><div><span className="eyebrow">DASHBOARD LEADER</span><h1>Kontrol operasional hari ini</h1><p>Ringkasan stok LC Rancamanyar dalam satu layar.</p></div><button className="refresh" onClick={()=>location.reload()}>↻ Refresh</button></div>
-  {error&&<div className="error">{error}</div>}
-  <div className="kpi-grid">
-   <Kpi icon="▣" label="Stok Gudang" value={loading?'…':fmt(totalG)} meta="Total saldo gudang"/>
-   <Kpi icon="▤" label="Stok Operasional" value={loading?'…':fmt(totalO)} meta="Total saldo operasional"/>
-   <Kpi icon="!" label="Stok Menipis" value={loading?'…':low.length} meta={low.length?'Perlu segera dicek':'Semua aman' } danger={low.length>0}/>
-   <Kpi icon="↗" label="Transfer" value={fmt(summary.transfer_transactions)} meta="Transaksi transfer"/>
-  </div>
-  <div className="dash-grid">
-   <div className="panel critical"><div className="panel-head"><div><h3>⚠ Produk perlu perhatian</h3><span>{low.length} produk di bawah / sama dengan minimum</span></div><button className="linkbtn" onClick={()=>setTab('warehouse')}>Lihat semua</button></div>
-    {low.length===0?<div className="empty">Tidak ada produk kritis. 👍</div>:<div className="critical-list">{low.slice(0,6).map(x=><div className="critical-row" key={x.id}><div><b>{x.name}</b><small>{x.code} · Min {fmt(x.min_stock)} {x.unit}</small></div><strong>{fmt(x.operasional_qty)} {x.unit}</strong></div>)}</div>}
-   </div>
-   <div className="panel"><div className="panel-head"><div><h3>Ringkasan aktivitas</h3><span>Pergerakan stok tercatat</span></div></div><div className="activity-stats"><div><span>Waste</span><b>{fmt(summary.waste_qty)}</b><small>{fmt(summary.waste_transactions)} transaksi</small></div><div><span>Adjustment</span><b>{fmt(summary.adjustment_qty)}</b><small>Selisih stok</small></div><div><span>Produk Aktif</span><b>{totalItems}</b><small>Master produk</small></div></div></div>
-  </div>
-  <div className="panel recent"><div className="panel-head"><div><h3>Aktivitas terbaru</h3><span>Transaksi terakhir yang masuk</span></div><button className="linkbtn" onClick={()=>setTab('history')}>Riwayat →</button></div>
-   {recent.length===0?<div className="empty">Belum ada transaksi.</div>:<div className="recent-list">{recent.map(r=><div className="recent-row" key={r.id}><div className={'activity-icon '+(Number(r.qty)>=0?'in':'out')}>{Number(r.qty)>=0?'↑':'↓'}</div><div><b>{r.products?.name||'Produk'}</b><small>{r.transaction_type.replaceAll('_',' ')} · {r.note||'Tanpa catatan'}</small></div><strong className={Number(r.qty)>=0?'positive':'negative'}>{Number(r.qty)>0?'+':''}{fmt(r.qty)}</strong><time>{new Date(r.created_at).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</time></div>)}</div>}
-  </div>
-  <div className="quick-actions"><button onClick={()=>setTab('stockin')}>＋ Input Stok Gudang</button><button onClick={()=>setTab('transfer')}>＋ Transfer Stok</button><button onClick={()=>setTab('opname')} className="secondary">＋ Input Sisa</button><button onClick={()=>setTab('warehouse')} className="secondary">▣ Cek Stok</button></div>
- </div>
-}
-function Kpi({icon,label,value,meta,danger}){return <div className={'kpi '+(danger?'danger':'')}><div className="kpi-icon">{icon}</div><div><span>{label}</span><b>{value}</b><small>{meta}</small></div></div>}
-function Stat({title,value}){return <div className="stat"><span>{title}</span><b>{value}</b></div>}
-function Action({title,text,onClick}){return <button className="tile action" onClick={onClick}><b>{title}</b><span>{text}</span><em>Buka →</em></button>}
+            <div class="form-group">
+                <label for="area">Area Input</label>
+                <select id="area" onchange="UbahLabelSatuan()" required>
+                    <option value="kasir">Kasir (Satuan Kecil / Pcs)</option>
+                    <option value="kitchen">Kitchen (Satuan Besar / Kg / Liter)</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="picName">PIC (Person In Charge)</label>
+                <input type="text" id="picName" placeholder="Nama petugas..." required>
+            </div>
 
-function StockIn({storeId}){const {items,loading,reload}=useStock(storeId);const [productId,setProductId]=useState(''),[qty,setQty]=useState(''),[note,setNote]=useState(''),[saving,setSaving]=useState(false),[msg,setMsg]=useState('');const selected=items.find(x=>x.id===productId);async function submit(e){e.preventDefault();setSaving(true);setMsg('');const amount=Number(qty);if(!Number.isFinite(amount)||amount<=0){setMsg('Jumlah stok harus lebih dari 0.');setSaving(false);return}const {error}=await supabase.rpc('record_stock_in',{p_store_id:storeId,p_product_id:productId,p_qty:amount,p_note:note||null});if(error)setMsg(error.message);else{setMsg('Stok gudang berhasil ditambahkan.');setQty('');setNote('');await reload()}setSaving(false)}return <Page title="Input Stok Gudang" subtitle="Tambah stok masuk ke gudang"><form className="card form" onSubmit={submit}><label>Produk<select value={productId} onChange={e=>setProductId(e.target.value)} required><option value="">Pilih produk</option>{items.map(x=><option key={x.id} value={x.id}>{x.name} — gudang {fmt(x.gudang_qty)} {x.unit}</option>)}</select></label>{selected&&<div className="hint">Stok gudang saat ini: <b>{fmt(selected.gudang_qty)} {selected.unit}</b></div>}<label>Jumlah stok masuk<input type="number" min="0.001" step="0.001" value={qty} onChange={e=>setQty(e.target.value)} required placeholder="Contoh: 10"/></label><label>Catatan<input value={note} onChange={e=>setNote(e.target.value)} placeholder="Contoh: Penerimaan supplier"/></label><button disabled={saving||loading}>{saving?'Menyimpan…':'＋ Tambah Stok Gudang'}</button>{msg&&<div className={msg.includes('berhasil')?'success':'error'}>{msg}</div>}</form></Page>}
+            <div class="form-group">
+                <label for="shift">Shift</label>
+                <select id="shift" required>
+                    <option value="">-- Pilih Shift --</option>
+                    <option value="Pagi">Pagi</option>
+                    <option value="Siang">Siang</option>
+                    <option value="Malam">Malam</option>
+                </select>
+            </div>
 
-function Warehouse({storeId,role}){const {items,loading,error}=useStock(storeId);return <Page title="Stok Gudang" subtitle="Saldo stok terkini"><div className="table-wrap">{loading?<p>Memuat stok…</p>:error?<div className="error">{error}</div>:<table><thead><tr><th>Produk</th><th>Satuan</th><th>Gudang</th><th>Total Operasional</th><th>Status</th></tr></thead><tbody>{items.map(x=><tr key={x.id}><td><b>{x.name}</b><small>{x.code}</small></td><td>{x.unit}</td><td>{fmt(x.gudang_qty)}</td><td>{fmt(x.operasional_qty)}</td><td><Status item={x}/></td></tr>)}</tbody></table>}</div>{role&&<div className="notice">Role aktif: {role}</div>}</Page>}
-function Status({item}){if(item.operasional_qty<=Number(item.min_stock||0))return <span className="badge danger">Menipis</span>;if(item.max_stock&&item.operasional_qty>=Number(item.max_stock))return <span className="badge warn">Penuh</span>;return <span className="badge ok">Normal</span>}
+            <div class="form-group">
+                <label id="labelQuantity" for="quantity">Jumlah (Pcs)</label>
+                <input type="number" id="quantity" min="1" placeholder="Masukkan jumlah..." required>
+            </div>
 
-function ReviseWarehouseStock({storeId}){const {items,loading,reload}=useStock(storeId);const [productId,setProductId]=useState(''),[qty,setQty]=useState(''),[unit,setUnit]=useState('pcs'),[note,setNote]=useState(''),[saving,setSaving]=useState(false),[msg,setMsg]=useState('');const selected=items.find(x=>x.id===productId);useEffect(()=>{if(selected){setQty(String(selected.gudang_qty||0));setUnit(selected.unit||'pcs');}},[productId]);async function submit(e){e.preventDefault();setSaving(true);setMsg('');const amount=Number(qty);if(!Number.isFinite(amount)||amount<0){setMsg('Stok baru harus 0 atau lebih.');setSaving(false);return}if(!selected){setMsg('Pilih produk terlebih dahulu.');setSaving(false);return}if(Math.abs(amount-Number(selected.gudang_qty||0))<0.0000001 && unit===selected.unit){setMsg('Tidak ada perubahan stok atau satuan.');setSaving(false);return}if(!note.trim()){setMsg('Catatan revisi wajib diisi agar perubahan dapat ditelusuri.');setSaving(false);return}const {error}=await supabase.rpc('record_warehouse_stock_revision',{p_store_id:storeId,p_product_id:productId,p_new_qty:amount,p_note:note.trim(),p_unit:unit});if(error)setMsg(error.message);else{setMsg('Revisi stok gudang dan satuan berhasil disimpan.');setNote('');await reload()}setSaving(false)}return <Page title="Revisi Stok Gudang" subtitle="Rubah stok gudang dengan catatan audit"><div className="notice">Menu ini hanya dapat diakses Admin, Store Leader, dan Team Leader. Setiap perubahan otomatis tercatat sebagai adjustment di Riwayat.</div><form className="card form" onSubmit={submit}><label>Produk<select value={productId} onChange={e=>setProductId(e.target.value)} required><option value="">Pilih produk</option>{items.map(x=><option key={x.id} value={x.id}>{x.name} — stok gudang {fmt(x.gudang_qty)} {x.unit}</option>)}</select></label>{selected&&<div className="hint">Stok saat ini: <b>{fmt(selected.gudang_qty)} {selected.unit}</b></div>}<label>Satuan<select value={unit} onChange={e=>setUnit(e.target.value)} required><option value="gr">gr</option><option value="kg">kg</option><option value="pcs">pcs</option></select></label><label>Stok gudang setelah revisi<input type="number" min="0" step="0.001" value={qty} onChange={e=>setQty(e.target.value)} required/></label><label>Alasan / Catatan Revisi<input value={note} onChange={e=>setNote(e.target.value)} placeholder="Contoh: Koreksi hasil pengecekan fisik" required/></label><button disabled={saving||loading}>{saving?'Menyimpan…':'✓ Simpan Revisi Stok'}</button>{msg&&<div className={msg.includes('berhasil')?'success':'error'}>{msg}</div>}</form></Page>}
+            <div class="modal-buttons">
+                <button type="submit" class="btn-submit">Simpan</button>
+                <button type="button" class="btn-cancel" onclick="closeModal()">Batal</button>
+            </div>
+        </form>
+    </div>
+</div>
 
-function Transfer({storeId}){
- const {items,loading,reload}=useStock(storeId);
- const [productId,setProductId]=useState(''),[operationalArea,setOperationalArea]=useState('kitchen'),[qty,setQty]=useState(''),[note,setNote]=useState(''),[saving,setSaving]=useState(false),[msg,setMsg]=useState('');
- const selected=items.find(x=>x.id===productId); const amount=Number(qty||0); const invalid=!!selected&&(amount<=0||amount>selected.gudang_qty);
- async function submit(e){e.preventDefault();setMsg('');if(!selected)return setMsg('Pilih produk terlebih dahulu.');if(amount<=0)return setMsg('Jumlah transfer harus lebih dari 0.');if(amount>selected.gudang_qty)return setMsg('Jumlah melebihi stok gudang yang tersedia.');setSaving(true);const {error}=await supabase.rpc('record_stock_transfer',{p_store_id:storeId,p_product_id:productId,p_qty:amount,p_note:note.trim()||null,p_operational_area:operationalArea});if(error)setMsg(error.message);else{setMsg('Transfer berhasil. Stok gudang dan total operasional sudah diperbarui.');setQty('');setNote('');await reload()}setSaving(false)}
- return <Page title="Transfer Stok" subtitle="Gudang → Operasional"><div className="notice">Pilih tujuan Kasir atau Kitchen. Saldo operasional di aplikasi tetap dihitung sebagai satu total gabungan Kasir + Kitchen.</div><form className="card form" onSubmit={submit}>
-  <label>Tujuan Operasional<select value={operationalArea} onChange={e=>setOperationalArea(e.target.value)} required><option value="kasir">Kasir</option><option value="kitchen">Kitchen</option></select></label>
-  <label>Produk<select value={productId} onChange={e=>{setProductId(e.target.value);setQty('');setMsg('')}} required><option value="">Pilih produk</option>{items.map(x=><option key={x.id} value={x.id}>{x.name} — gudang {fmt(x.gudang_qty)} {x.unit}</option>)}</select></label>
-  {selected&&<div className="stock-preview"><div><small>STOK GUDANG</small><b>{fmt(selected.gudang_qty)} {selected.unit}</b></div><div>→</div><div><small>TOTAL OPERASIONAL</small><b>{fmt(selected.operasional_qty)} {selected.unit}</b><small>Tujuan: {operationalArea==='kasir'?'Kasir':'Kitchen'}</small></div></div>}
-  <label>Jumlah Transfer<input type="number" min="0.001" max={selected?.gudang_qty||undefined} step="0.001" value={qty} onChange={e=>setQty(e.target.value)} required/></label>
-  {selected&&<div className={invalid?'error':'hint'}>{invalid?'Jumlah tidak boleh melebihi stok gudang.':<>Maksimal transfer: <b>{fmt(selected.gudang_qty)} {selected.unit}</b></>}</div>}
-  <label>Catatan<input value={note} onChange={e=>setNote(e.target.value)} placeholder="Contoh: Pengambilan stok untuk operasional"/></label>
-  <button disabled={saving||loading||invalid}>{saving?'Menyimpan…':'Transfer Stok'}</button>{msg&&<div className={msg.includes('berhasil')?'success':'error'}>{msg}</div>}
- </form></Page>
-}
+<script>
+    // ==========================================
+    // MODULE 1: MASTER DATA PRODUK & KONVERSI
+    // Mudah disesuaikan! Jika ada produk baru tinggal tambah baris di bawah ini.
+    // rasioKonversi artinya: Berapa 'pcs' untuk membentuk 1 'Kg/Liter'
+    // ==========================================
+    const MASTER_PRODUK = {
+        "Beras": { rasioKonversi: 12, satuanBesar: "Kg", satuanKecil: "Pcs" },
+        "Minyak Goreng": { rasioKonversi: 4, satuanBesar: "Liter", satuanKecil: "Pcs" },
+        "Gula Pasir": { rasioKonversi: 10, satuanBesar: "Kg", satuanKecil: "Pcs" },
+        "Susu UHT": { rasioKonversi: 12, satuanBesar: "Box", satuanKecil: "Pcs" }
+    };
 
-function Opname({storeId}){
- const {items,loading,reload}=useStock(storeId); const [productId,setProductId]=useState(''),[operationalArea,setOperationalArea]=useState('kitchen'),[areaSystem,setAreaSystem]=useState(null),[physical,setPhysical]=useState(''),[waste,setWaste]=useState('0'),[note,setNote]=useState(''),[saving,setSaving]=useState(false),[result,setResult]=useState(null),[msg,setMsg]=useState('');
- const selected=items.find(x=>x.id===productId);
- useEffect(()=>{let live=true;async function loadArea(){if(!storeId||!productId){setAreaSystem(null);return}const {data,error}=await supabase.from('operational_area_balances').select('qty').eq('store_id',storeId).eq('product_id',productId).eq('operational_area',operationalArea).maybeSingle();if(live)setAreaSystem(error?null:Number(data?.qty||0))}loadArea();return()=>{live=false}},[storeId,productId,operationalArea]);
- async function submit(e){e.preventDefault();setSaving(true);setMsg('');setResult(null);const {data,error}=await supabase.rpc('record_operational_opname',{p_store_id:storeId,p_product_id:productId,p_physical_stock:Number(physical),p_waste_qty:Number(waste||0),p_note:note||null,p_operational_area:operationalArea});if(error)setMsg(error.message);else{setResult(data);setPhysical('');setWaste('0');setNote('');await reload()}setSaving(false)}
- return <Page title="Input Sisa" subtitle="Opname stok operasional"><form className="card form" onSubmit={submit}><label>Area Operasional<select value={operationalArea} onChange={e=>setOperationalArea(e.target.value)} required><option value="kasir">Kasir</option><option value="kitchen">Kitchen</option></select></label><label>Produk<select value={productId} onChange={e=>setProductId(e.target.value)} required><option value="">Pilih produk</option>{items.map(x=><option key={x.id} value={x.id}>{x.name} — total operasional {fmt(x.operasional_qty)} {x.unit}</option>)}</select></label>{selected&&<div className="hint">Sistem {operationalArea==='kasir'?'Kasir':'Kitchen'}: <b>{fmt(areaSystem)} {selected.unit}</b> · Total operasional: <b>{fmt(selected.operasional_qty)} {selected.unit}</b></div>}<label>Sisa fisik<input type="number" min="0" step="0.001" value={physical} onChange={e=>setPhysical(e.target.value)} required/></label><label>Waste<input type="number" min="0" step="0.001" value={waste} onChange={e=>setWaste(e.target.value)}/></label><label>Catatan<input value={note} onChange={e=>setNote(e.target.value)} placeholder="Opsional"/></label><button disabled={saving||loading}>{saving?'Menyimpan…':'Simpan Opname'}</button>{msg&&<div className="error">{msg}</div>}{result&&<div className="result"><b>Opname tersimpan</b><div>Area: {result.operational_area==='kasir'?'Kasir':'Kitchen'}</div><div>Pemakaian: {fmt(result.usage_qty)}</div><div>Waste: {fmt(result.waste_qty)}</div><div>Surplus: {fmt(result.surplus_qty)}</div></div>}</form></Page>}
+    // Inisialisasi data transaksi stok dari localStorage
+    let stockData = JSON.parse(localStorage.getItem('multiUnitStokData')) || {};
+    let transactionType = '';
 
-function History({storeId}){const [rows,setRows]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState('');async function load(){if(!storeId)return;setLoading(true);const {data,error}=await supabase.from('stock_transactions').select('id,product_id,area,transaction_type,qty,note,created_at,products(name,unit),profiles(full_name)').eq('store_id',storeId).order('created_at',{ascending:false}).limit(50);if(error)setError(error.message);setRows(data||[]);setLoading(false)}useEffect(()=>{load()},[storeId]);useEffect(()=>{if(!storeId)return;const channel=supabase.channel('rcm-history-'+storeId).on('postgres_changes',{event:'INSERT',schema:'public',table:'stock_transactions',filter:'store_id=eq.'+storeId},load).subscribe();return()=>supabase.removeChannel(channel)},[storeId]);return <Page title="Riwayat" subtitle="50 transaksi terbaru"><div className="history">{loading?<p>Memuat riwayat…</p>:error?<div className="error">{error}</div>:rows.length===0?<p>Belum ada transaksi.</p>:rows.map(r=><div className="history-row" key={r.id}><div><b>{r.products?.name||'Produk'}</b><small>{r.transaction_type} · {r.area}</small></div><strong className={Number(r.qty)<0?'negative':'positive'}>{Number(r.qty)>0?'+':''}{fmt(r.qty)} {r.products?.unit||''}</strong><time>{new Date(r.created_at).toLocaleString('id-ID')}</time></div>)}</div></Page>}
-function CrewStock({storeId}){
- const {items,loading,error}=useStock(storeId);
- const low=items.filter(x=>x.operasional_qty<=Number(x.min_stock||0));
- return <Page title="Stok" subtitle="Cek stok dengan cepat">
-  {error&&<div className="error">{error}</div>}
-  <div className="crew-summary"><div><span>Produk Menipis</span><b>{loading?'…':low.length}</b></div><div><span>Produk Aktif</span><b>{loading?'…':items.length}</b></div></div>
-  <div className="crew-stock-list">{loading?<div className="empty">Memuat stok…</div>:items.length===0?<div className="empty">Belum ada produk aktif.</div>:items.map(x=>{
-   const isLow=x.operasional_qty<=Number(x.min_stock||0);
-   return <div className={'crew-stock-card '+(isLow?'is-low':'')} key={x.id}><div className="crew-product"><b>{x.name}</b><small>{x.code} · {x.unit}</small></div><div className="crew-stock-values"><div><span>Gudang</span><strong>{fmt(x.gudang_qty)}</strong></div><div><span>Total Operasional</span><strong>{fmt(x.operasional_qty)}</strong></div></div><span className={'badge '+(isLow?'danger':'ok')}>{isLow?'Menipis':'Normal'}</span></div>})}</div>
- </Page>
-}
+    // Referensi DOM
+    const modal = document.getElementById('transactionModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const transactionForm = document.getElementById('transactionForm');
+    const stockTableBody = document.getElementById('stockTableBody');
+    const itemSelect = document.getElementById('itemName');
+    const areaSelect = document.getElementById('area');
+    const labelQuantity = document.getElementById('labelQuantity');
+    const konversiInfo = document.getElementById('konversiInfo');
 
-function CrewOpname({storeId}){
- const {items,loading,reload}=useStock(storeId); const [productId,setProductId]=useState(''),[operationalArea,setOperationalArea]=useState('kitchen'),[areaSystem,setAreaSystem]=useState(null),[physical,setPhysical]=useState(''),[waste,setWaste]=useState('0'),[saving,setSaving]=useState(false),[msg,setMsg]=useState('');
- const selected=items.find(x=>x.id===productId);
- useEffect(()=>{let live=true;async function loadArea(){if(!storeId||!productId){setAreaSystem(null);return}const {data}=await supabase.from('operational_area_balances').select('qty').eq('store_id',storeId).eq('product_id',productId).eq('operational_area',operationalArea).maybeSingle();if(live)setAreaSystem(Number(data?.qty||0))}loadArea();return()=>{live=false}},[storeId,productId,operationalArea]);
- async function submit(e){e.preventDefault();setMsg('');if(!selected)return setMsg('Pilih produk terlebih dahulu.');const qty=Number(physical),w=Number(waste||0);if(!Number.isFinite(qty)||qty<0)return setMsg('Sisa fisik tidak boleh kurang dari 0.');if(!Number.isFinite(w)||w<0)return setMsg('Waste tidak boleh kurang dari 0.');setSaving(true);const {error}=await supabase.rpc('record_operational_opname',{p_store_id:storeId,p_product_id:productId,p_physical_stock:qty,p_waste_qty:w,p_note:null,p_operational_area:operationalArea});if(error)setMsg(error.message);else{setMsg('Sisa stok berhasil disimpan.');setPhysical('');setWaste('0');await reload()}setSaving(false)}
- return <Page title="Input Sisa" subtitle="Masukkan sisa stok yang kamu hitung"><div className="crew-tip">💡 Pilih area yang dihitung. Total stok operasional di aplikasi tetap merupakan gabungan Kasir + Kitchen.</div><form className="card form crew-form" onSubmit={submit}><label>1. Pilih Area<select value={operationalArea} onChange={e=>setOperationalArea(e.target.value)} required><option value="kasir">Kasir</option><option value="kitchen">Kitchen</option></select></label><label>2. Pilih Produk<select value={productId} onChange={e=>setProductId(e.target.value)} required><option value="">Pilih produk</option>{items.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>{selected&&<div className="crew-current"><span>Sistem {operationalArea==='kasir'?'Kasir':'Kitchen'} · Total operasional</span><b>{fmt(areaSystem)} · {fmt(selected.operasional_qty)} {selected.unit}</b></div>}<label>3. Sisa Fisik<input className="crew-big-input" type="number" min="0" step="0.001" value={physical} onChange={e=>setPhysical(e.target.value)} required placeholder="Masukkan jumlah sisa"/></label><details className="crew-optional"><summary>Tambah waste (opsional)</summary><label>Waste<input type="number" min="0" step="0.001" value={waste} onChange={e=>setWaste(e.target.value)}/></label></details><button className="crew-save" disabled={saving||loading}>{saving?'Menyimpan…':'✓ Simpan Sisa Stok'}</button>{msg&&<div className={msg.includes('berhasil')?'success':'error'}>{msg}</div>}</form></Page>
-}
+    // Load Pilihan Master Produk ke Dropdown Form saat aplikasi jalan
+    initMasterProdukDropdown();
+    updateUI();
 
-function MyHistory({storeId}){const [rows,setRows]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState('');async function load(){if(!storeId)return;setLoading(true);const {data:user}=await supabase.auth.getUser();if(!user?.user){setLoading(false);return}const {data,error}=await supabase.from('stock_transactions').select('id,area,transaction_type,qty,note,created_at,products(name,unit)').eq('store_id',storeId).eq('created_by',user.user.id).order('created_at',{ascending:false}).limit(50);if(error)setError(error.message);setRows(data||[]);setLoading(false)}useEffect(()=>{load()},[storeId]);useEffect(()=>{if(!storeId)return;const channel=supabase.channel('rcm-my-history-'+storeId).on('postgres_changes',{event:'INSERT',schema:'public',table:'stock_transactions',filter:'store_id=eq.'+storeId},load).subscribe();return()=>supabase.removeChannel(channel)},[storeId]);return <Page title="Riwayat Saya" subtitle="Aktivitas stok yang kamu input"><div className="history">{loading?<p className="empty">Memuat riwayat…</p>:error?<div className="error">{error}</div>:rows.length===0?<p className="empty">Belum ada aktivitas stok dari akun ini.</p>:rows.map(r=><div className="history-row" key={r.id}><div><b>{r.products?.name||'Produk'}</b><small>{friendlyType(r.transaction_type)} · {r.area==='operasional'?'Operasional':'Gudang'}</small></div><strong className={Number(r.qty)<0?'negative':'positive'}>{Number(r.qty)>0?'+':''}{fmt(r.qty)} {r.products?.unit||''}</strong><time>{new Date(r.created_at).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</time></div>)}</div></Page>}
-function friendlyType(t){return ({stock_in:'Stok masuk',transfer_in:'Stok masuk operasional',transfer_out:'Transfer keluar',adjustment:'Penyesuaian',waste:'Waste'})[t]||t.replaceAll('_',' ')}
+    function initMasterProdukDropdown() {
+        Object.keys(MASTER_PRODUK).forEach(produk => {
+            const opt = document.createElement('option');
+            opt.value = produk;
+            opt.innerText = produk;
+            itemSelect.appendChild(opt);
+        });
+    }
 
-function Page({title,subtitle,children}){return <div className="page"><div className="page-title"><div><h1>{title}</h1><p>{subtitle}</p></div></div>{children}</div>}
+    function UbahInfoSatuan() {
+        const produk = itemSelect.value;
+        if(produk && MASTER_PRODUK[produk]) {
+            const p = MASTER_PRODUK[produk];
+            konversiInfo.innerText = `Catatan Konversi: ${p.rasioKonversi} ${p.satuanKecil} = 1 ${p.satuanBesar}`;
+            UbahLabelSatuan();
+        } else {
+            konversiInfo.innerText = "";
+        }
+    }
 
-function Products(){
- const [rows,setRows]=useState([]),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[error,setError]=useState('');
- const blank={id:null,code:'',name:'',category:'',unit:'pcs',min_stock:0,max_stock:0,active:true};
- const [form,setForm]=useState(blank);
- async function load(){setLoading(true);const {data,error}=await supabase.from('products').select('*').order('name');if(error)setError(error.message);setRows(data||[]);setLoading(false)}
- useEffect(()=>{load()},[]);
- function edit(r){setForm({...r})}
- function reset(){setForm(blank)}
- async function save(e){e.preventDefault();setSaving(true);setError('');const payload={p_product_id:form.id,p_code:form.code.trim(),p_name:form.name.trim(),p_category:form.category?.trim()||null,p_unit:form.unit||'pcs',p_min_stock:Number(form.min_stock||0),p_max_stock:Number(form.max_stock||0),p_active:!!form.active};let result;if(form.id){result=await supabase.rpc('update_product_master',payload)}else{result=await supabase.from('products').insert({code:payload.p_code,name:payload.p_name,category:payload.p_category,unit:payload.p_unit,min_stock:payload.p_min_stock,max_stock:payload.p_max_stock,active:payload.p_active})}const {error}=result;if(error)setError(error.message);else{reset();await load()}setSaving(false)}
- async function toggle(r){setSaving(true);setError('');const {error}=await supabase.rpc('set_product_active',{p_product_id:r.id,p_active:!r.active});if(error)setError(error.message);else await load();setSaving(false)}
- return <Page title="Master Produk" subtitle="Kelola produk, satuan dan batas stok"><div className="split"><form className="card form" onSubmit={save}><h3>{form.id?'Edit Produk':'Tambah Produk'}</h3><label>Kode Produk<input value={form.code} onChange={e=>setForm({...form,code:e.target.value})} required/></label><label>Nama Produk<input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} required/></label><label>Kategori<input value={form.category||''} onChange={e=>setForm({...form,category:e.target.value})}/></label><label>Satuan<select value={form.unit} onChange={e=>setForm({...form,unit:e.target.value})} required><option value="gr">gr</option><option value="kg">kg</option><option value="pcs">pcs</option></select></label><div className="two"><label>Min Stock<input type="number" min="0" step="0.001" value={form.min_stock} onChange={e=>setForm({...form,min_stock:e.target.value})}/></label><label>Max Stock<input type="number" min="0" step="0.001" value={form.max_stock} onChange={e=>setForm({...form,max_stock:e.target.value})}/></label></div><label className="check"><input type="checkbox" checked={!!form.active} onChange={e=>setForm({...form,active:e.target.checked})}/> Produk aktif</label><div className="actions"><button disabled={saving}>{saving?'Menyimpan…':form.id?'Simpan Perubahan':'Tambah Produk'}</button>{form.id&&<button type="button" className="secondary" onClick={reset}>Batal</button>}</div>{error&&<div className="error">{error}</div>}</form><div className="table-wrap">{loading?<p>Memuat produk…</p>:rows.length===0?<p>Belum ada produk. Tambahkan produk pertama.</p>:<table><thead><tr><th>Produk</th><th>Kategori</th><th>Satuan</th><th>Min/Max</th><th>Status</th><th></th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td><b>{r.name}</b><small>{r.code}</small></td><td>{r.category||'-'}</td><td>{r.unit}</td><td>{fmt(r.min_stock)} / {fmt(r.max_stock)}</td><td>{r.active?<span className="badge ok">Aktif</span>:<span className="badge danger">Nonaktif</span>}</td><td><button className="smallbtn" onClick={()=>edit(r)}>Edit</button><button className="smallbtn" onClick={()=>toggle(r)}>{r.active?'Nonaktifkan':'Aktifkan'}</button></td></tr>)}</tbody></table>}</div></div></Page>
-}
+    function UbahLabelSatuan() {
+        const produk = itemSelect.value;
+        const area = areaSelect.value;
+        if(produk && MASTER_PRODUK[produk]) {
+            const satuan = area === 'kasir' ? MASTER_PRODUK[produk].satuanKecil : MASTER_PRODUK[produk].satuanBesar;
+            labelQuantity.innerText = `Jumlah (${satuan})`;
+        } else {
+            labelQuantity.innerText = "Jumlah";
+        }
+    }
 
-function Users(){
- const [rows,setRows]=useState([]),[stores,setStores]=useState([]),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[error,setError]=useState('');
- async function load(){setLoading(true);const [{data:u,error:ue},{data:s,error:se}]=await Promise.all([supabase.from('profiles').select('id,full_name,role,store_id,active,created_at,stores(name,code)').order('full_name'),supabase.from('stores').select('id,name,code').eq('active',true).order('name')]);if(ue||se)setError((ue||se).message);setRows(u||[]);setStores(s||[]);setLoading(false)}
- useEffect(()=>{load()},[]);
- async function update(id,patch){setSaving(true);setError('');const {error}=await supabase.from('profiles').update(patch).eq('id',id);if(error)setError(error.message);else await load();setSaving(false)}
- return <Page title="User / Role" subtitle="Kelola role, store dan status pengguna"><div className="notice">Akun login dibuat melalui Supabase Auth. Di sini Admin mengatur profil, role, store dan status aktif pengguna.</div><div className="table-wrap">{loading?<p>Memuat pengguna…</p>:rows.length===0?<p>Belum ada profil pengguna.</p>:<table><thead><tr><th>Pengguna</th><th>Role</th><th>Store</th><th>Status</th><th>Aksi</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td><b>{r.full_name||'Tanpa Nama'}</b><small>{r.id.slice(0,8)}…</small></td><td><select value={r.role} disabled={saving} onChange={e=>update(r.id,{role:e.target.value})}><option value="admin">Admin</option><option value="store_leader">Store Leader</option><option value="team_leader">Team Leader</option><option value="crew">Crew</option></select></td><td><select value={r.store_id||''} disabled={saving} onChange={e=>update(r.id,{store_id:e.target.value||null})}><option value="">-</option>{stores.map(st=><option key={st.id} value={st.id}>{st.name}</option>)}</select></td><td>{r.active?<span className="badge ok">Aktif</span>:<span className="badge danger">Nonaktif</span>}</td><td><button className="smallbtn" disabled={saving} onClick={()=>update(r.id,{active:!r.active})}>{r.active?'Nonaktifkan':'Aktifkan'}</button></td></tr>)}</tbody></table>}{error&&<div className="error">{error}</div>}</div></Page>
-}
+    function openModal(type) {
+        transactionType = type;
+        modalTitle.innerText = type === 'add' ? 'Input Barang Masuk' : 'Input Barang Keluar';
+        transactionForm.reset();
+        konversiInfo.innerText = "";
+        labelQuantity.innerText = "Jumlah";
+        modal.style.display = 'flex';
+    }
+
+    function closeModal() {
+        modal.style.display = 'none';
+    }
+
+    // Handle Form Submit
+    transactionForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const itemName = itemSelect.value;
+        const area = areaSelect.value;
+        const qty = parseInt(document.getElementById('quantity').value);
+        
+        if (!stockData[itemName]) {
+            stockData[itemName] = { stokKasir: 0, stokKitchen: 0, lastUpdated: '' };
+        }
+
+        // Eksekusi kalkulasi berdasarkan area input (Kasir / Kitchen)
+        if (transactionType === 'add') {
+            if (area === 'kasir') stockData[itemName].stokKasir += qty;
+            if (area === 'kitchen') stockData[itemName].stokKitchen += qty;
+        } else if (transactionType === 'reduce') {
+            if (area === 'kasir') {
+                if (stockData[itemName].stokKasir < qty) { alert('Stok kasir tidak mencukupi!'); return; }
+                stockData[itemName].stokKasir -= qty;
+            }
+            if (area === 'kitchen') {
+                if (stockData[itemName].stokKitchen < qty) { alert('Stok kitchen tidak mencukupi!'); return; }
+                stockData[itemName].stokKitchen -= qty;
+            }
+        }
+
+        // Generate Waktu Sinkronisasi
+        const now = new Date();
