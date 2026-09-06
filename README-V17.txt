@@ -1,20 +1,18 @@
 RCM Management Stock V17
 
-Perubahan utama:
-1. Input Sisa sekarang memakai satu angka total Stok Operasional (Kasir + Kitchen).
-2. Input sisa terbaru menggantikan saldo operasional sebelumnya, bukan menambahkannya.
-3. Stok Operasional ditampilkan sebagai satu saldo gabungan dalam Base Unit.
-4. Stok Gudang tetap terpisah.
-5. Stok Akhir = Stok Gudang + Stok Operasional terbaru.
-6. Stok Awal memakai ending hari sebelumnya (atau saldo awal pertama jika belum ada snapshot).
-7. Pemakaian = Stok Awal - Stok Akhir.
-8. Nomor transaksi ditampilkan pada hasil input sisa.
-9. RPC baru: record_operational_stock_snapshot.
-10. RPC baru sudah dibatasi untuk authenticated dan memvalidasi role/store.
+Perubahan:
+1. Menu Stok Crew menggunakan tampilan tabel yang sama dengan Stok Gudang Leader.
+2. Kolom: Produk, Satuan, Stok Awal, Pemakaian, Stok Akhir, Status.
+3. Stok Akhir = Stok Gudang + Stok Operasional terbaru.
+4. Stok Operasional ditampilkan sebagai satu total gabungan Kasir + Kitchen.
+5. Input Sisa menggunakan total fisik gabungan Kasir + Kitchen.
+6. Input Sisa memakai RPC record_operational_stock_snapshot.
+7. Data Stok Awal/Pemakaian/Stok Akhir membaca stock_daily_snapshots terbaru.
+8. Realtime diperbarui saat stock_transactions maupun stock_daily_snapshots berubah.
+9. Tombol simpan Input Sisa memakai try/finally agar tidak tertahan di status Menyimpan.
 
-File:
-- app/page.js -> gunakan page_v17.js
-- migration_v17_operational_total.sql -> dokumentasi perubahan
+File utama: RCM-Management-Stock-V17.js
 
-Catatan:
-Database RPC sudah diterapkan pada project Supabase RCM. Karena akses tulis GitHub/Vercel sebelumnya ditolak integration, file app/page.js perlu di-commit ke repository secara manual jika deployment belum otomatis.
+Catatan implementasi:
+- Ganti app/page.js dengan file ini jika struktur proyek sama dengan versi sebelumnya.
+- Supabase harus memiliki RPC record_operational_stock_snapshot dan tabel stock_daily_snapshots sesuai skema V17 yang sudah dibuat sebelumnya.
