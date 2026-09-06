@@ -1,3 +1,7 @@
+'use client';
+import {useEffect,useMemo,useState} from 'react';
+import {supabase} from '../lib/supabase';
+
 const UNIT_OPTIONS=['gr','kg','pcs'];
 const baseUnit=(p)=>p?.base_unit||p?.unit||'pcs';
 const areaConfig=(p,area)=>{
@@ -8,10 +12,6 @@ const areaConfig=(p,area)=>{
 };
 const areaToBase=(qty,p,area)=>Number(qty||0)/Number(areaConfig(p,area).perBase||1);
 const baseToArea=(qty,p,area)=>Number(qty||0)*Number(areaConfig(p,area).perBase||1);
-
-'use client';
-import {useEffect,useMemo,useState} from 'react';
-import {supabase} from '../lib/supabase';
 
 const baseMenu=[['dashboard','Dashboard'],['stockin','Input Stok Gudang'],['warehouse','Stok Gudang'],['transfer','Transfer'],['opname','Input Sisa'],['history','Riwayat'],['products','Master Produk'],['users','User / Role']];
 const canRevise=(role)=>['admin','store_leader','team_leader'].includes(role);
@@ -194,13 +194,6 @@ function CrewStock({storeId}){
    </tr>)}</tbody></table>}
   </div>
  </Page>
-}
-
-function Opname({storeId}){
- const {items,loading,reload}=useStock(storeId); const [productId,setProductId]=useState(''),[physical,setPhysical]=useState(''),[waste,setWaste]=useState('0'),[note,setNote]=useState(''),[saving,setSaving]=useState(false),[result,setResult]=useState(null),[msg,setMsg]=useState('');
- const selected=items.find(x=>x.id===productId);
- async function submit(e){e.preventDefault();setMsg('');setResult(null);if(!selected)return setMsg('Pilih produk terlebih dahulu.');const qty=Number(physical),w=Number(waste||0);if(!Number.isFinite(qty)||qty<0)return setMsg('Sisa stok tidak boleh kurang dari 0.');if(!Number.isFinite(w)||w<0)return setMsg('Waste tidak boleh kurang dari 0.');setSaving(true);try{const {data,error}=await supabase.rpc('record_operational_stock_snapshot',{p_store_id:storeId,p_product_id:productId,p_physical_qty:qty,p_waste_qty:w,p_note:note.trim()||null});if(error)setMsg(error.message);else{setResult(data);setMsg('Sisa stok operasional berhasil disimpan.');setPhysical('');setWaste('0');setNote('');await reload()}}catch(err){setMsg(err?.message||'Terjadi kesalahan saat menyimpan.')}finally{setSaving(false)}}
- return <Page title="Input Sisa" subtitle="Input sisa operasional gabungan Kasir + Kitchen"><form className="card form" onSubmit={submit}><div className="notice">Sisa yang dimasukkan adalah total fisik gabungan Kasir + Kitchen. Sistem otomatis mengganti saldo operasional dengan sisa terbaru dan menghitung Stok Akhir = Gudang + Operasional.</div><label>Produk<select value={productId} onChange={e=>{setProductId(e.target.value);setMsg('');setResult(null)}} required><option value="">Pilih produk</option>{items.map(x=><option key={x.id} value={x.id}>{x.name} — operasional {fmt(x.operasional_qty)} {baseUnit(x)}</option>)}</select></label>{selected&&<div className="hint">Sebelum input: Gudang <b>{fmt(selected.gudang_qty)} {baseUnit(selected)}</b> · Operasional <b>{fmt(selected.operasional_qty)} {baseUnit(selected)}</b> · Stok Akhir <b>{fmt(selected.ending_qty)} {baseUnit(selected)}</b></div>}<label>Sisa fisik operasional (Kasir + Kitchen)<input type="number" min="0" step="0.001" value={physical} onChange={e=>setPhysical(e.target.value)} required placeholder="Masukkan total sisa fisik"/></label><label>Waste<input type="number" min="0" step="0.001" value={waste} onChange={e=>setWaste(e.target.value)}/></label><label>Catatan<input value={note} onChange={e=>setNote(e.target.value)} placeholder="Opsional"/></label><button disabled={saving||loading}>{saving?'Menyimpan…':'✓ Simpan Sisa Stok'}</button>{msg&&<div className={msg.includes('berhasil')?'success':'error'}>{msg}</div>}{result&&<div className="result"><b>Snapshot stok tersimpan</b><div>Stok Awal: {fmt(result.opening_qty)}</div><div>Pemakaian: {fmt(result.usage_qty)}</div><div>Stok Akhir: {fmt(result.ending_qty)}</div><div>Operasional terbaru: {fmt(result.operational_after)}</div></div>}</form></Page>
 }
 
 function MyHistory({storeId}){const [rows,setRows]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState('');async function load(){if(!storeId)return;setLoading(true);const {data:user}=await supabase.auth.getUser();if(!user?.user){setLoading(false);return}const {data,error}=await supabase.from('stock_transactions').select('id,area,transaction_type,qty,note,created_at,products(name,unit)').eq('store_id',storeId).eq('created_by',user.user.id).order('created_at',{ascending:false}).limit(50);if(error)setError(error.message);setRows(data||[]);setLoading(false)}useEffect(()=>{load()},[storeId]);useEffect(()=>{if(!storeId)return;const channel=supabase.channel('rcm-my-history-'+storeId).on('postgres_changes',{event:'INSERT',schema:'public',table:'stock_transactions',filter:'store_id=eq.'+storeId},load).subscribe();return()=>supabase.removeChannel(channel)},[storeId]);return <Page title="Riwayat Saya" subtitle="Aktivitas stok yang kamu input"><div className="history">{loading?<p className="empty">Memuat riwayat…</p>:error?<div className="error">{error}</div>:rows.length===0?<p className="empty">Belum ada aktivitas stok dari akun ini.</p>:rows.map(r=><div className="history-row" key={r.id}><div><b>{r.products?.name||'Produk'}</b><small>{friendlyType(r.transaction_type)} · {r.area==='operasional'?'Operasional':'Gudang'}</small></div><strong className={Number(r.qty)<0?'negative':'positive'}>{Number(r.qty)>0?'+':''}{fmt(r.qty)} {r.products?.unit||''}</strong><time>{new Date(r.created_at).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</time></div>)}</div></Page>}
