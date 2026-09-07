@@ -28,7 +28,7 @@ export default function Home(){
  const storeId=profile?.store_id;
  const isCrew=profile?.role==='crew';
  const crewMenu=[['crew-stock','Stok'],['transfer','Transfer'],['crew-opname','Input Sisa'],['crew-history','Riwayat Saya']];
- const leaderMenu=[...baseMenu.slice(0,3),...(canRevise(profile?.role)?[['revise','Revisi Stok Gudang']]:[]),...baseMenu.slice(3)];
+ const leaderMenu=[...baseMenu.slice(0,3),...(canRevise(profile?.role)?[['revise','Revisi Stok Gudang'],['operational-revise','Revisi Stok Operasional']]:[]),...baseMenu.slice(3)];
  return <div className={'shell '+(isCrew?'crew-shell':'')}><aside><div className="sidebrand"><b>RCM</b><span>Management Stock</span></div><nav>{(isCrew?crewMenu:leaderMenu).map(([id,label])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}>{label}</button>)}</nav><button className="logout" onClick={logout}>Keluar</button></aside><main className="content"><header><div><small>STORE</small><h2>{profile?.stores?.name||'LC Rancamanyar'}</h2></div><div className="user">{profile?.full_name||session.user.email}<small>{profile?.role||'crew'}</small></div></header>{msg&&<div className="error top-error">{msg}</div>}<section>
  {isCrew&&tab==='crew-stock'&&<CrewStock storeId={storeId}/>} 
  {isCrew&&tab==='transfer'&&<Transfer storeId={storeId}/>} 
@@ -38,13 +38,14 @@ export default function Home(){
  {!isCrew&&tab==='stockin'&&<StockIn storeId={storeId}/>} 
  {!isCrew&&tab==='warehouse'&&<Warehouse storeId={storeId} role={profile?.role}/>} 
  {!isCrew&&tab==='revise'&&canRevise(profile?.role)&&<ReviseWarehouseStock storeId={storeId}/>} 
+ {!isCrew&&tab==='operational-revise'&&canRevise(profile?.role)&&<OperationalRevision storeId={storeId}/>} 
  {!isCrew&&tab==='transfer'&&<Transfer storeId={storeId}/>} 
  {!isCrew&&tab==='opname'&&<Opname storeId={storeId}/>} 
  {!isCrew&&tab==='history'&&<History storeId={storeId}/>}
  {!isCrew&&tab==='products'&&profile?.role==='admin'&&<Products/>}
  {!isCrew&&tab==='users'&&profile?.role==='admin'&&<Users/>}
  </section></main></div>
-}
+   }
 function Login({email,password,setEmail,setPassword,login,busy,msg}){return <main className="login"><div className="brand"><div className="logo">RCM</div><h1>Management Stock</h1><p>LC Rancamanyar</p><form onSubmit={login} className="card"><label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label><label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} required/></label><button disabled={busy}>{busy?'Memproses…':'Masuk'}</button>{msg&&<div className="error">{msg}</div>}</form></div></main>}
 
 function useStock(storeId){
