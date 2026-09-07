@@ -152,6 +152,64 @@ function Status({item}){if(item.operasional_qty<=Number(item.min_stock||0))retur
 
 function ReviseWarehouseStock({storeId}){const {items,loading,reload}=useStock(storeId);const [productId,setProductId]=useState(''),[qty,setQty]=useState(''),[unit,setUnit]=useState('pcs'),[note,setNote]=useState(''),[saving,setSaving]=useState(false),[msg,setMsg]=useState('');const selected=items.find(x=>x.id===productId);useEffect(()=>{if(selected){setQty(String(selected.gudang_qty||0));setUnit(baseUnit(selected)||'pcs');}},[productId]);async function submit(e){e.preventDefault();setSaving(true);setMsg('');const amount=Number(qty);if(!Number.isFinite(amount)||amount<0){setMsg('Stok baru harus 0 atau lebih.');setSaving(false);return}if(!selected){setMsg('Pilih produk terlebih dahulu.');setSaving(false);return}if(Math.abs(amount-Number(selected.gudang_qty||0))<0.0000001 && unit===selected.unit){setMsg('Tidak ada perubahan stok atau satuan.');setSaving(false);return}if(!note.trim()){setMsg('Catatan revisi wajib diisi agar perubahan dapat ditelusuri.');setSaving(false);return}const {error}=await supabase.rpc('record_warehouse_stock_revision',{p_store_id:storeId,p_product_id:productId,p_new_qty:amount,p_note:note.trim(),p_unit:unit});if(error)setMsg(error.message);else{setMsg('Revisi stok gudang dan satuan berhasil disimpan.');setNote('');await reload()}setSaving(false)}return <Page title="Revisi Stok Gudang" subtitle="Rubah stok gudang dengan catatan audit"><div className="notice">Menu ini hanya dapat diakses Admin, Store Leader, dan Team Leader. Setiap perubahan otomatis tercatat sebagai adjustment di Riwayat.</div><form className="card form" onSubmit={submit}><label>Produk<select value={productId} onChange={e=>setProductId(e.target.value)} required><option value="">Pilih produk</option>{items.map(x=><option key={x.id} value={x.id}>{x.name} — stok gudang {fmt(x.gudang_qty)} {baseUnit(x)}</option>)}</select></label>{selected&&<div className="hint">Stok saat ini: <b>{fmt(selected.gudang_qty)} {baseUnit(selected)}</b></div>}<label>Satuan<select value={unit} onChange={e=>setUnit(e.target.value)} required><option value="gr">gr</option><option value="kg">kg</option><option value="pcs">pcs</option></select></label><label>Stok gudang setelah revisi<input type="number" min="0" step="0.001" value={qty} onChange={e=>setQty(e.target.value)} required/></label><label>Alasan / Catatan Revisi<input value={note} onChange={e=>setNote(e.target.value)} placeholder="Contoh: Koreksi hasil pengecekan fisik" required/></label><button disabled={saving||loading}>{saving?'Menyimpan…':'✓ Simpan Revisi Stok'}</button>{msg&&<div className={msg.includes('berhasil')?'success':'error'}>{msg}</div>}</form></Page>}
 
+function OperationalRevision({storeId}){
+ const {items,loading,reload}=useStock(storeId);
+ const [productId,setProductId]=useState(''),[type,setType]=useState('ending'),[qty,setQty]=useState(''),[note,setNote]=useState(''),[saving,setSaving]=useState(false),[msg,setMsg]=useState('');
+ const [transfers,setTransfers]=useState([]),[transferId,setTransferId]=useState(''),[newTransferQty,setNewTransferQty]=useState('');
+ const selected=items.find(x=>x.id===productId);
+ const selectedTransfer=transfers.find(x=>x.reference_id===transferId);
+ useEffect(()=>{ if(type!=='transfer'||!storeId)return; loadTransfers(); },[type,storeId]);
+ useEffect(()=>{ if(type==='ending'&&selected)setQty(String(selected.operasional_qty||0)); else if(type==='opening'&&selected)setQty(''); },[type,productId]);
+ async function loadTransfers(){
+   const {data,error}=await supabase.from('stock_transactions').select('reference_id,transaction_no,qty,operational_area,created_at,product_id,products(name,unit)').eq('store_id',storeId).eq('transaction_type','transfer_in').not('reference_id','is',null).order('created_at',{ascending:false}).limit(50);
+   if(error)setMsg(error.message); else setTransfers(data||[]);
+ }
+ async function submitStock(e){
+   e.preventDefault();setSaving(true);setMsg('');
+   try{
+    if(!selected) throw new Error('Pilih produk terlebih dahulu.');
+    const amount=Number(qty); if(!Number.isFinite(amount)||amount<0) throw new Error('Nilai stok harus 0 atau lebih.');
+    if(!note.trim()) throw new Error('Alasan revisi wajib diisi.');
+    const {data,error}=await supabase.rpc('revise_operational_stock',{p_store_id:storeId,p_product_id:productId,p_revision_type:type,p_new_qty:amount,p_note:note.trim()});
+    if(error) throw error;
+    setMsg('Revisi stok operasional berhasil disimpan. Nomor transaksi: '+(data?.transaction_no||'-')); setNote(''); setQty(''); await reload();
+   }catch(err){setMsg(err?.message||'Revisi gagal.');}finally{setSaving(false)}
+ }
+ async function submitTransfer(e){
+   e.preventDefault();setSaving(true);setMsg('');
+   try{
+    if(!selectedTransfer) throw new Error('Pilih transaksi transfer terlebih dahulu.');
+    const amount=Number(newTransferQty); if(!Number.isFinite(amount)||amount<=0) throw new Error('Jumlah transfer baru harus lebih dari 0.');
+    if(!note.trim()) throw new Error('Alasan revisi wajib diisi.');
+    const {data,error}=await supabase.rpc('revise_stock_transfer',{p_store_id:storeId,p_reference_id:transferId,p_new_qty:amount,p_note:note.trim()});
+    if(error) throw error;
+    setMsg('Transfer berhasil direvisi. Transaksi baru: '+(data?.transaction_no||'-')); setTransferId('');setNewTransferQty('');setNote('');await reload();await loadTransfers();
+   }catch(err){setMsg(err?.message||'Revisi transfer gagal.');}finally{setSaving(false)}
+ }
+ return <Page title="Revisi Stok Operasional" subtitle="Koreksi stok akhir, stok awal, atau transaksi transfer tanpa menghapus riwayat">
+   <div className="notice"><b>Audit aman:</b> revisi tidak menghapus transaksi lama. Sistem membuat penyesuaian baru dan mencatat nomor transaksi serta alasan revisi.</div>
+   <div className="card form">
+    <label>Jenis Revisi<select value={type} onChange={e=>{setType(e.target.value);setMsg('');setQty('');setTransferId('')}}><option value="ending">Revisi Stok Akhir / Operasional</option><option value="opening">Revisi Stok Awal</option><option value="transfer">Revisi Input Transfer</option></select></label>
+    {type!=='transfer'?<form onSubmit={submitStock}>
+      <label>Produk<select value={productId} onChange={e=>setProductId(e.target.value)} required><option value="">Pilih produk</option>{items.map(x=><option key={x.id} value={x.id}>{x.name} — {fmt(x.operasional_qty)} {x.base_unit||x.unit}</option>)}</select></label>
+      {selected&&<div className="hint">Stok operasional saat ini: <b>{fmt(selected.operasional_qty)} {selected.base_unit||selected.unit}</b><br/>Stok gudang: <b>{fmt(selected.gudang_qty)} {selected.base_unit||selected.unit}</b></div>}
+      <label>{type==='opening'?'Stok Awal Baru':'Stok Akhir / Operasional Baru'}<input type="number" min="0" step="0.001" value={qty} onChange={e=>setQty(e.target.value)} required/></label>
+      {type==='opening'&&<div className="hint">Perubahan stok awal hanya mengubah dasar perhitungan Pemakaian; saldo fisik tidak diubah.</div>}
+      {type==='ending'&&<div className="hint">Sistem akan membuat adjustment sebesar selisih stok, sehingga saldo operasional menjadi nilai baru.</div>}
+      <label>Alasan / Catatan Revisi<input value={note} onChange={e=>setNote(e.target.value)} required placeholder="Contoh: Koreksi hasil pengecekan fisik"/></label>
+      <button disabled={saving||loading}>{saving?'Menyimpan…':'✓ Simpan Revisi'}</button>
+    </form>:<form onSubmit={submitTransfer}>
+      <label>Transaksi Transfer<select value={transferId} onChange={e=>{setTransferId(e.target.value);setNewTransferQty('')}} required><option value="">Pilih transaksi</option>{transfers.map((x,i)=><option key={x.reference_id||i} value={x.reference_id}>{x.transaction_no||x.reference_id?.slice(0,8)} — {x.products?.name||'Produk'} — {fmt(x.qty)} {x.products?.unit||''} → {x.operational_area||'-'}</option>)}</select></label>
+      {selectedTransfer&&<div className="hint">Transfer lama: <b>{fmt(selectedTransfer.qty)} {selectedTransfer.products?.unit||''}</b> · {selectedTransfer.operational_area||'-'}<br/>Nomor: <b>{selectedTransfer.transaction_no||'-'}</b></div>}
+      <label>Jumlah Transfer Baru<input type="number" min="0.001" step="0.001" value={newTransferQty} onChange={e=>setNewTransferQty(e.target.value)} required/></label>
+      <label>Alasan / Catatan Revisi<input value={note} onChange={e=>setNote(e.target.value)} required placeholder="Contoh: Salah input jumlah transfer"/></label>
+      <button disabled={saving}>{saving?'Menyimpan…':'✓ Simpan Revisi Transfer'}</button>
+    </form>}
+    {msg&&<div className={msg.toLowerCase().includes('berhasil')?'success':'error'}>{msg}</div>}
+   </div>
+ </Page>
+        }
+
 function Transfer({storeId}={}){
  const {items=[],loading=false,reload}=useStock(storeId);
  const [productId,setProductId]=useState(''),[operationalArea,setOperationalArea]=useState('kitchen'),[qty,setQty]=useState(''),[note,setNote]=useState(''),[saving,setSaving]=useState(false),[msg,setMsg]=useState('');
