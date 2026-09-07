@@ -28,7 +28,7 @@ export default function Home(){
  const storeId=profile?.store_id;
  const isCrew=profile?.role==='crew';
  const crewMenu=[['crew-stock','Stok'],['transfer','Transfer'],['crew-opname','Input Sisa'],['crew-history','Riwayat Saya']];
- const leaderMenu=[...baseMenu.slice(0,3),...(canRevise(profile?.role)?[['revise','Revisi Stok Gudang'],['operational-revise','Revisi Stok Operasional']]:[]),...baseMenu.slice(3)];
+ const leaderMenu=[...baseMenu.slice(0,3),...(canRevise(profile?.role)?[['revise','Revisi Stok Gudang']]:[]),...baseMenu.slice(3)];
  return <div className={'shell '+(isCrew?'crew-shell':'')}><aside><div className="sidebrand"><b>RCM</b><span>Management Stock</span></div><nav>{(isCrew?crewMenu:leaderMenu).map(([id,label])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}>{label}</button>)}</nav><button className="logout" onClick={logout}>Keluar</button></aside><main className="content"><header><div><small>STORE</small><h2>{profile?.stores?.name||'LC Rancamanyar'}</h2></div><div className="user">{profile?.full_name||session.user.email}<small>{profile?.role||'crew'}</small></div></header>{msg&&<div className="error top-error">{msg}</div>}<section>
  {isCrew&&tab==='crew-stock'&&<CrewStock storeId={storeId}/>} 
  {isCrew&&tab==='transfer'&&<Transfer storeId={storeId}/>} 
@@ -38,14 +38,13 @@ export default function Home(){
  {!isCrew&&tab==='stockin'&&<StockIn storeId={storeId}/>} 
  {!isCrew&&tab==='warehouse'&&<Warehouse storeId={storeId} role={profile?.role}/>} 
  {!isCrew&&tab==='revise'&&canRevise(profile?.role)&&<ReviseWarehouseStock storeId={storeId}/>} 
- {!isCrew&&tab==='operational-revise'&&canRevise(profile?.role)&&<OperationalRevision storeId={storeId}/>} 
  {!isCrew&&tab==='transfer'&&<Transfer storeId={storeId}/>} 
  {!isCrew&&tab==='opname'&&<Opname storeId={storeId}/>} 
  {!isCrew&&tab==='history'&&<History storeId={storeId}/>}
  {!isCrew&&tab==='products'&&profile?.role==='admin'&&<Products/>}
  {!isCrew&&tab==='users'&&profile?.role==='admin'&&<Users/>}
  </section></main></div>
-   }
+}
 function Login({email,password,setEmail,setPassword,login,busy,msg}){return <main className="login"><div className="brand"><div className="logo">RCM</div><h1>Management Stock</h1><p>LC Rancamanyar</p><form onSubmit={login} className="card"><label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label><label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} required/></label><button disabled={busy}>{busy?'Memproses…':'Masuk'}</button>{msg&&<div className="error">{msg}</div>}</form></div></main>}
 
 function useStock(storeId){
@@ -153,64 +152,6 @@ function Status({item}){if(item.operasional_qty<=Number(item.min_stock||0))retur
 
 function ReviseWarehouseStock({storeId}){const {items,loading,reload}=useStock(storeId);const [productId,setProductId]=useState(''),[qty,setQty]=useState(''),[unit,setUnit]=useState('pcs'),[note,setNote]=useState(''),[saving,setSaving]=useState(false),[msg,setMsg]=useState('');const selected=items.find(x=>x.id===productId);useEffect(()=>{if(selected){setQty(String(selected.gudang_qty||0));setUnit(baseUnit(selected)||'pcs');}},[productId]);async function submit(e){e.preventDefault();setSaving(true);setMsg('');const amount=Number(qty);if(!Number.isFinite(amount)||amount<0){setMsg('Stok baru harus 0 atau lebih.');setSaving(false);return}if(!selected){setMsg('Pilih produk terlebih dahulu.');setSaving(false);return}if(Math.abs(amount-Number(selected.gudang_qty||0))<0.0000001 && unit===selected.unit){setMsg('Tidak ada perubahan stok atau satuan.');setSaving(false);return}if(!note.trim()){setMsg('Catatan revisi wajib diisi agar perubahan dapat ditelusuri.');setSaving(false);return}const {error}=await supabase.rpc('record_warehouse_stock_revision',{p_store_id:storeId,p_product_id:productId,p_new_qty:amount,p_note:note.trim(),p_unit:unit});if(error)setMsg(error.message);else{setMsg('Revisi stok gudang dan satuan berhasil disimpan.');setNote('');await reload()}setSaving(false)}return <Page title="Revisi Stok Gudang" subtitle="Rubah stok gudang dengan catatan audit"><div className="notice">Menu ini hanya dapat diakses Admin, Store Leader, dan Team Leader. Setiap perubahan otomatis tercatat sebagai adjustment di Riwayat.</div><form className="card form" onSubmit={submit}><label>Produk<select value={productId} onChange={e=>setProductId(e.target.value)} required><option value="">Pilih produk</option>{items.map(x=><option key={x.id} value={x.id}>{x.name} — stok gudang {fmt(x.gudang_qty)} {baseUnit(x)}</option>)}</select></label>{selected&&<div className="hint">Stok saat ini: <b>{fmt(selected.gudang_qty)} {baseUnit(selected)}</b></div>}<label>Satuan<select value={unit} onChange={e=>setUnit(e.target.value)} required><option value="gr">gr</option><option value="kg">kg</option><option value="pcs">pcs</option></select></label><label>Stok gudang setelah revisi<input type="number" min="0" step="0.001" value={qty} onChange={e=>setQty(e.target.value)} required/></label><label>Alasan / Catatan Revisi<input value={note} onChange={e=>setNote(e.target.value)} placeholder="Contoh: Koreksi hasil pengecekan fisik" required/></label><button disabled={saving||loading}>{saving?'Menyimpan…':'✓ Simpan Revisi Stok'}</button>{msg&&<div className={msg.includes('berhasil')?'success':'error'}>{msg}</div>}</form></Page>}
 
-function OperationalRevision({storeId}){
- const {items,loading,reload}=useStock(storeId);
- const [productId,setProductId]=useState(''),[type,setType]=useState('ending'),[qty,setQty]=useState(''),[note,setNote]=useState(''),[saving,setSaving]=useState(false),[msg,setMsg]=useState('');
- const [transfers,setTransfers]=useState([]),[transferId,setTransferId]=useState(''),[newTransferQty,setNewTransferQty]=useState('');
- const selected=items.find(x=>x.id===productId);
- const selectedTransfer=transfers.find(x=>x.reference_id===transferId);
- useEffect(()=>{ if(type!=='transfer'||!storeId)return; loadTransfers(); },[type,storeId]);
- useEffect(()=>{ if(type==='ending'&&selected)setQty(String(selected.operasional_qty||0)); else if(type==='opening'&&selected)setQty(''); },[type,productId]);
- async function loadTransfers(){
-   const {data,error}=await supabase.from('stock_transactions').select('reference_id,transaction_no,qty,operational_area,created_at,product_id,products(name,unit)').eq('store_id',storeId).eq('transaction_type','transfer_in').not('reference_id','is',null).order('created_at',{ascending:false}).limit(50);
-   if(error)setMsg(error.message); else setTransfers(data||[]);
- }
- async function submitStock(e){
-   e.preventDefault();setSaving(true);setMsg('');
-   try{
-    if(!selected) throw new Error('Pilih produk terlebih dahulu.');
-    const amount=Number(qty); if(!Number.isFinite(amount)||amount<0) throw new Error('Nilai stok harus 0 atau lebih.');
-    if(!note.trim()) throw new Error('Alasan revisi wajib diisi.');
-    const {data,error}=await supabase.rpc('revise_operational_stock',{p_store_id:storeId,p_product_id:productId,p_revision_type:type,p_new_qty:amount,p_note:note.trim()});
-    if(error) throw error;
-    setMsg('Revisi stok operasional berhasil disimpan. Nomor transaksi: '+(data?.transaction_no||'-')); setNote(''); setQty(''); await reload();
-   }catch(err){setMsg(err?.message||'Revisi gagal.');}finally{setSaving(false)}
- }
- async function submitTransfer(e){
-   e.preventDefault();setSaving(true);setMsg('');
-   try{
-    if(!selectedTransfer) throw new Error('Pilih transaksi transfer terlebih dahulu.');
-    const amount=Number(newTransferQty); if(!Number.isFinite(amount)||amount<=0) throw new Error('Jumlah transfer baru harus lebih dari 0.');
-    if(!note.trim()) throw new Error('Alasan revisi wajib diisi.');
-    const {data,error}=await supabase.rpc('revise_stock_transfer',{p_store_id:storeId,p_reference_id:transferId,p_new_qty:amount,p_note:note.trim()});
-    if(error) throw error;
-    setMsg('Transfer berhasil direvisi. Transaksi baru: '+(data?.transaction_no||'-')); setTransferId('');setNewTransferQty('');setNote('');await reload();await loadTransfers();
-   }catch(err){setMsg(err?.message||'Revisi transfer gagal.');}finally{setSaving(false)}
- }
- return <Page title="Revisi Stok Operasional" subtitle="Koreksi stok akhir, stok awal, atau transaksi transfer tanpa menghapus riwayat">
-   <div className="notice"><b>Audit aman:</b> revisi tidak menghapus transaksi lama. Sistem membuat penyesuaian baru dan mencatat nomor transaksi serta alasan revisi.</div>
-   <div className="card form">
-    <label>Jenis Revisi<select value={type} onChange={e=>{setType(e.target.value);setMsg('');setQty('');setTransferId('')}}><option value="ending">Revisi Stok Akhir / Operasional</option><option value="opening">Revisi Stok Awal</option><option value="transfer">Revisi Input Transfer</option></select></label>
-    {type!=='transfer'?<form onSubmit={submitStock}>
-      <label>Produk<select value={productId} onChange={e=>setProductId(e.target.value)} required><option value="">Pilih produk</option>{items.map(x=><option key={x.id} value={x.id}>{x.name} — {fmt(x.operasional_qty)} {x.base_unit||x.unit}</option>)}</select></label>
-      {selected&&<div className="hint">Stok operasional saat ini: <b>{fmt(selected.operasional_qty)} {selected.base_unit||selected.unit}</b><br/>Stok gudang: <b>{fmt(selected.gudang_qty)} {selected.base_unit||selected.unit}</b></div>}
-      <label>{type==='opening'?'Stok Awal Baru':'Stok Akhir / Operasional Baru'}<input type="number" min="0" step="0.001" value={qty} onChange={e=>setQty(e.target.value)} required/></label>
-      {type==='opening'&&<div className="hint">Perubahan stok awal hanya mengubah dasar perhitungan Pemakaian; saldo fisik tidak diubah.</div>}
-      {type==='ending'&&<div className="hint">Sistem akan membuat adjustment sebesar selisih stok, sehingga saldo operasional menjadi nilai baru.</div>}
-      <label>Alasan / Catatan Revisi<input value={note} onChange={e=>setNote(e.target.value)} required placeholder="Contoh: Koreksi hasil pengecekan fisik"/></label>
-      <button disabled={saving||loading}>{saving?'Menyimpan…':'✓ Simpan Revisi'}</button>
-    </form>:<form onSubmit={submitTransfer}>
-      <label>Transaksi Transfer<select value={transferId} onChange={e=>{setTransferId(e.target.value);setNewTransferQty('')}} required><option value="">Pilih transaksi</option>{transfers.map((x,i)=><option key={x.reference_id||i} value={x.reference_id}>{x.transaction_no||x.reference_id?.slice(0,8)} — {x.products?.name||'Produk'} — {fmt(x.qty)} {x.products?.unit||''} → {x.operational_area||'-'}</option>)}</select></label>
-      {selectedTransfer&&<div className="hint">Transfer lama: <b>{fmt(selectedTransfer.qty)} {selectedTransfer.products?.unit||''}</b> · {selectedTransfer.operational_area||'-'}<br/>Nomor: <b>{selectedTransfer.transaction_no||'-'}</b></div>}
-      <label>Jumlah Transfer Baru<input type="number" min="0.001" step="0.001" value={newTransferQty} onChange={e=>setNewTransferQty(e.target.value)} required/></label>
-      <label>Alasan / Catatan Revisi<input value={note} onChange={e=>setNote(e.target.value)} required placeholder="Contoh: Salah input jumlah transfer"/></label>
-      <button disabled={saving}>{saving?'Menyimpan…':'✓ Simpan Revisi Transfer'}</button>
-    </form>}
-    {msg&&<div className={msg.toLowerCase().includes('berhasil')?'success':'error'}>{msg}</div>}
-   </div>
- </Page>
-        }
-
 function Transfer({storeId}={}){
  const {items=[],loading=false,reload}=useStock(storeId);
  const [productId,setProductId]=useState(''),[operationalArea,setOperationalArea]=useState('kitchen'),[qty,setQty]=useState(''),[note,setNote]=useState(''),[saving,setSaving]=useState(false),[msg,setMsg]=useState('');
@@ -290,18 +231,16 @@ function Page({title,subtitle,children}){return <div className="page"><div class
 
 function Products(){
  const [rows,setRows]=useState([]),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[error,setError]=useState('');
- const blank={id:null,code:'',name:'',category:'',unit:'pcs',base_unit:'pcs',kasir_unit:'pcs',kasir_per_base:1,kitchen_unit:'pcs',kitchen_per_base:1,min_stock:0,max_stock:0,active:true};
+ const blank={id:null,code:'',name:'',category:'',unit:'pcs',min_stock:0,max_stock:0,active:true};
  const [form,setForm]=useState(blank);
- async function load(){setLoading(true);setError('');try{const {data,error}=await supabase.from('products').select('*').order('name');if(error)throw error;setRows(data||[])}catch(e){setError(e?.message||'Gagal memuat master produk.');setRows([])}finally{setLoading(false)}}
+ async function load(){setLoading(true);const {data,error}=await supabase.from('products').select('*').order('name');if(error)setError(error.message);setRows(data||[]);setLoading(false)}
  useEffect(()=>{load()},[]);
- function edit(r){setForm({...blank,...r,kasir_per_base:r.kasir_per_base||1,kitchen_per_base:r.kitchen_per_base||1})}
- function reset(){setForm({...blank})}
- function valid(){const min=Number(form.min_stock),max=Number(form.max_stock),kp=Number(form.kasir_per_base),hp=Number(form.kitchen_per_base);if(!form.code.trim()||!form.name.trim())return 'Kode dan nama produk wajib diisi.';if(!Number.isFinite(min)||min<0)return 'Min Stock harus 0 atau lebih.';if(!Number.isFinite(max)||max<0)return 'Max Stock harus 0 atau lebih.';if(max>0&&max<min)return 'Max Stock tidak boleh lebih kecil dari Min Stock.';if(!Number.isFinite(kp)||kp<=0)return 'Konversi Kasir harus lebih dari 0.';if(!Number.isFinite(hp)||hp<=0)return 'Konversi Kitchen harus lebih dari 0.';return ''}
- async function save(e){e.preventDefault();setSaving(true);setError('');try{const validation=valid();if(validation)throw new Error(validation);const payload={code:form.code.trim(),name:form.name.trim(),category:form.category?.trim()||null,unit:form.base_unit||form.unit||'pcs',base_unit:form.base_unit||form.unit||'pcs',kasir_unit:form.kasir_unit||form.base_unit||form.unit||'pcs',kasir_per_base:Number(form.kasir_per_base||1),kitchen_unit:form.kitchen_unit||form.base_unit||form.unit||'pcs',kitchen_per_base:Number(form.kitchen_per_base||1),min_stock:Number(form.min_stock||0),max_stock:Number(form.max_stock||0),active:!!form.active};let result;if(form.id){result=await supabase.from('products').update(payload).eq('id',form.id)}else{result=await supabase.from('products').insert(payload)}if(result.error)throw result.error;reset();await load()}catch(e){console.error(e);setError(e?.message||'Gagal menyimpan produk.')}finally{setSaving(false)}}
- async function toggle(r){setSaving(true);setError('');try{const {error}=await supabase.rpc('set_product_active',{p_product_id:r.id,p_active:!r.active});if(error)throw error;await load()}catch(e){setError(e?.message||'Gagal mengubah status produk.')}finally{setSaving(false)}}
- const set=(k,v)=>setForm(x=>({...x,[k]:v}));
- return <Page title="Master Produk" subtitle="Kelola produk, satuan dan konversi Kasir/Kitchen"><div className="split"><form className="card form" onSubmit={save}><h3>{form.id?'Edit Produk':'Tambah Produk'}</h3><label>Kode Produk<input value={form.code} onChange={e=>set('code',e.target.value)} required/></label><label>Nama Produk<input value={form.name} onChange={e=>set('name',e.target.value)} required/></label><label>Kategori<input value={form.category||''} onChange={e=>set('category',e.target.value)}/></label><label>Satuan Dasar (Base Unit)<select value={form.base_unit||form.unit} onChange={e=>{set('base_unit',e.target.value);if(!form.id){set('kasir_unit',e.target.value);set('kitchen_unit',e.target.value)}}} required><option value="gr">gr</option><option value="kg">kg</option><option value="pcs">pcs</option></select></label><div className="notice"><b>Konversi Area</b><br/>Angka “per Base” berarti berapa unit area = 1 Base Unit.</div><div className="two"><label>Kasir Unit<select value={form.kasir_unit||form.base_unit||'pcs'} onChange={e=>set('kasir_unit',e.target.value)}><option value="gr">gr</option><option value="kg">kg</option><option value="pcs">pcs</option></select></label><label>Kasir per Base<input type="number" min="0.000001" step="0.001" value={form.kasir_per_base} onChange={e=>set('kasir_per_base',e.target.value)}/></label></div><div className="two"><label>Kitchen Unit<select value={form.kitchen_unit||form.base_unit||'pcs'} onChange={e=>set('kitchen_unit',e.target.value)}><option value="gr">gr</option><option value="kg">kg</option><option value="pcs">pcs</option></select></label><label>Kitchen per Base<input type="number" min="0.000001" step="0.001" value={form.kitchen_per_base} onChange={e=>set('kitchen_per_base',e.target.value)}/></label></div><div className="hint">Contoh Beras: Base = kg, Kasir = pcs, Kasir per Base = 12 → 12 pcs = 1 kg.</div><div className="two"><label>Min Stock<input type="number" min="0" step="0.001" value={form.min_stock} onChange={e=>set('min_stock',e.target.value)}/></label><label>Max Stock<input type="number" min="0" step="0.001" value={form.max_stock} onChange={e=>set('max_stock',e.target.value)}/></label></div><label className="check"><input type="checkbox" checked={!!form.active} onChange={e=>set('active',e.target.checked)}/> Produk aktif</label><div className="actions"><button disabled={saving}>{saving?'Menyimpan…':form.id?'Simpan Perubahan':'Tambah Produk'}</button>{form.id&&<button type="button" className="secondary" onClick={reset} disabled={saving}>Batal</button>}</div>{error&&<div className="error">{error}</div>}</form><div className="table-wrap">{loading?<p>Memuat produk…</p>:rows.length===0?<p>Belum ada produk. Tambahkan produk pertama.</p>:<table><thead><tr><th>Produk</th><th>Base</th><th>Kasir</th><th>Kitchen</th><th>Min/Max</th><th>Status</th><th></th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td><b>{r.name}</b><small>{r.code}</small></td><td>{r.base_unit||r.unit}</td><td>{r.kasir_unit||r.unit} = {fmt(r.kasir_per_base||1)} / Base</td><td>{r.kitchen_unit||r.unit} = {fmt(r.kitchen_per_base||1)} / Base</td><td>{fmt(r.min_stock)} / {fmt(r.max_stock)}</td><td>{r.active?<span className="badge ok">Aktif</span>:<span className="badge danger">Nonaktif</span>}</td><td><button className="smallbtn" onClick={()=>edit(r)} disabled={saving}>Edit</button><button className="smallbtn" onClick={()=>toggle(r)} disabled={saving}>{r.active?'Nonaktifkan':'Aktifkan'}</button></td></tr>)}</tbody></table>}</div></div></Page>
-  }
+ function edit(r){setForm({...r})}
+ function reset(){setForm(blank)}
+ async function save(e){e.preventDefault();setSaving(true);setError('');const payload={p_product_id:form.id,p_code:form.code.trim(),p_name:form.name.trim(),p_category:form.category?.trim()||null,p_unit:form.unit||'pcs',p_min_stock:Number(form.min_stock||0),p_max_stock:Number(form.max_stock||0),p_active:!!form.active};let result;if(form.id){result=await supabase.rpc('update_product_master',payload)}else{result=await supabase.from('products').insert({code:payload.p_code,name:payload.p_name,category:payload.p_category,unit:payload.p_unit,min_stock:payload.p_min_stock,max_stock:payload.p_max_stock,active:payload.p_active})}const {error}=result;if(error)setError(error.message);else{reset();await load()}setSaving(false)}
+ async function toggle(r){setSaving(true);setError('');const {error}=await supabase.rpc('set_product_active',{p_product_id:r.id,p_active:!r.active});if(error)setError(error.message);else await load();setSaving(false)}
+ return <Page title="Master Produk" subtitle="Kelola produk, satuan dan batas stok"><div className="split"><form className="card form" onSubmit={save}><h3>{form.id?'Edit Produk':'Tambah Produk'}</h3><label>Kode Produk<input value={form.code} onChange={e=>setForm({...form,code:e.target.value})} required/></label><label>Nama Produk<input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} required/></label><label>Kategori<input value={form.category||''} onChange={e=>setForm({...form,category:e.target.value})}/></label><label>Satuan<select value={form.unit} onChange={e=>setForm({...form,unit:e.target.value})} required><option value="gr">gr</option><option value="kg">kg</option><option value="pcs">pcs</option></select></label><div className="two"><label>Min Stock<input type="number" min="0" step="0.001" value={form.min_stock} onChange={e=>setForm({...form,min_stock:e.target.value})}/></label><label>Max Stock<input type="number" min="0" step="0.001" value={form.max_stock} onChange={e=>setForm({...form,max_stock:e.target.value})}/></label></div><label className="check"><input type="checkbox" checked={!!form.active} onChange={e=>setForm({...form,active:e.target.checked})}/> Produk aktif</label><div className="actions"><button disabled={saving}>{saving?'Menyimpan…':form.id?'Simpan Perubahan':'Tambah Produk'}</button>{form.id&&<button type="button" className="secondary" onClick={reset}>Batal</button>}</div>{error&&<div className="error">{error}</div>}</form><div className="table-wrap">{loading?<p>Memuat produk…</p>:rows.length===0?<p>Belum ada produk. Tambahkan produk pertama.</p>:<table><thead><tr><th>Produk</th><th>Kategori</th><th>Satuan</th><th>Min/Max</th><th>Status</th><th></th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td><b>{r.name}</b><small>{r.code}</small></td><td>{r.category||'-'}</td><td>{r.unit}</td><td>{fmt(r.min_stock)} / {fmt(r.max_stock)}</td><td>{r.active?<span className="badge ok">Aktif</span>:<span className="badge danger">Nonaktif</span>}</td><td><button className="smallbtn" onClick={()=>edit(r)}>Edit</button><button className="smallbtn" onClick={()=>toggle(r)}>{r.active?'Nonaktifkan':'Aktifkan'}</button></td></tr>)}</tbody></table>}</div></div></Page>
+}
 
 function Users(){
  const [rows,setRows]=useState([]),[stores,setStores]=useState([]),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[error,setError]=useState('');
