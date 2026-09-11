@@ -12,8 +12,17 @@ const unitMap=p=>({
   ...(p?.unit_2&&p?.unit_2_per_base?{[p.unit_2]:Number(p.unit_2_per_base)}:{}),
   ...(p?.unit_3&&p?.unit_3_per_base?{[p.unit_3]:Number(p.unit_3_per_base)}:{})
 });
-const toBase=(qty,unit,p)=>Number(qty||0)/(Number(unitMap(p)[unit]||1));
-const fromBase=(qty,unit,p)=>Number(qty||0)*Number(unitMap(p)[unit]||1);
+// Semua stok internal disimpan dalam Base Unit.
+// Contoh: 1 pack = 24 pcs → 1 pack = 24 pcs.
+const toBase=(qty,unit,p)=>{
+  const factor=Number(unitMap(p)[unit]||1);
+  return Number(qty||0)*factor;
+};
+
+const fromBase=(qty,unit,p)=>{
+  const factor=Number(unitMap(p)[unit]||1);
+  return factor>0 ? Number(qty||0)/factor : 0;
+};
 const canLeader=r=>['admin','store_leader','team_leader'].includes(r);
 const canAdmin=r=>r==='admin';
 
