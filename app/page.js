@@ -5033,4 +5033,3 @@ function GlobalStyles(){
 
   return null;
 }
-export default Home;
