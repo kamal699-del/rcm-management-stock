@@ -934,3 +934,831 @@ function StockView({
     </Page>
   );
   }
+function Dashboard({ storeId, setTab }) {
+  const { items, loading, error } =
+    useData(storeId);
+
+  const summary = useMemo(() => {
+    const total = items.length;
+
+    const low = items.filter((p) => {
+      const min = Number(p.min_stock || 0);
+      return (
+        min > 0 &&
+        Number(p.ending_qty || 0) <= min
+      );
+    }).length;
+
+    const out = items.filter(
+      (p) =>
+        Number(p.ending_qty || 0) <= 0
+    ).length;
+
+    const warehouse = items.reduce(
+      (a, p) =>
+        a + Number(p.warehouse_qty || 0),
+      0
+    );
+
+    const operational = items.reduce(
+      (a, p) =>
+        a + Number(p.operational_qty || 0),
+      0
+    );
+
+    return {
+      total,
+      low,
+      out,
+      warehouse,
+      operational,
+    };
+  }, [items]);
+
+  return (
+    <Page
+      title="Dashboard"
+      subtitle="Ringkasan kondisi stok store"
+    >
+      {error && (
+        <div className="error">
+          {error}
+        </div>
+      )}
+
+      <div className="stats">
+        <div
+          className="stat"
+          onClick={() => setTab('warehouse')}
+        >
+          <small>Total Produk</small>
+          <strong>
+            {loading ? '…' : summary.total}
+          </strong>
+        </div>
+
+        <div
+          className="stat"
+          onClick={() => setTab('warehouse')}
+        >
+          <small>Stok Menipis</small>
+          <strong>
+            {loading ? '…' : summary.low}
+          </strong>
+        </div>
+
+        <div
+          className="stat"
+          onClick={() => setTab('warehouse')}
+        >
+          <small>Stock Out</small>
+          <strong>
+            {loading ? '…' : summary.out}
+          </strong>
+        </div>
+
+        <div className="stat">
+          <small>Stok Gudang</small>
+          <strong>
+            {loading
+              ? '…'
+              : fmt(summary.warehouse)}
+          </strong>
+        </div>
+
+        <div className="stat">
+          <small>Stok Operasional</small>
+          <strong>
+            {loading
+              ? '…'
+              : fmt(summary.operational)}
+          </strong>
+        </div>
+      </div>
+
+      <div className="card">
+        <h3>Alur Stok</h3>
+
+        <div className="flow">
+          <div>
+            <b>Input Gudang</b>
+            <span>
+              Menambah stok gudang
+            </span>
+          </div>
+
+          <div>→</div>
+
+          <div>
+            <b>Output Gudang</b>
+            <span>
+              Gudang → Operasional
+            </span>
+          </div>
+
+          <div>→</div>
+
+          <div>
+            <b>Pemakaian</b>
+            <span>
+              SO / pemakaian aktual
+            </span>
+          </div>
+
+          <div>→</div>
+
+          <div>
+            <b>Penjualan</b>
+            <span>
+              Rekap POS
+            </span>
+          </div>
+        </div>
+      </div>
+    </Page>
+  );
+}
+
+function TransactionForm({
+  storeId,
+  mode,
+}) {
+  const { items, pics, loading, error } =
+    useData(storeId);
+
+  const isInput = mode === 'input';
+
+  const [productId, setProductId] =
+    useState('');
+
+  const [picId, setPicId] =
+    useState('');
+
+  const [qty, setQty] =
+    useState('');
+
+  const [unit, setUnit] =
+    useState('');
+
+  const [note, setNote] =
+    useState('');
+
+  const [msg, setMsg] =
+    useState(null);
+
+  const [busy, setBusy] =
+    useState(false);
+
+  const product = items.find(
+    (p) => p.id === productId
+  );
+
+  useEffect(() => {
+    if (!product) {
+      setUnit('');
+      return;
+    }
+
+    setUnit(baseUnit(product));
+  }, [productId]);
+
+  async function submit(e) {
+    e.preventDefault();
+
+    if (!storeId || !productId) {
+      setMsg({
+        ok: false,
+        text: 'Store dan produk wajib dipilih.',
+      });
+      return;
+    }
+
+    if (!picId) {
+      setMsg({
+        ok: false,
+        text: 'PIC wajib dipilih.',
+      });
+      return;
+    }
+
+    if (Number(qty) <= 0) {
+      setMsg({
+        ok: false,
+        text: 'Qty harus lebih dari 0.',
+      });
+      return;
+    }
+
+    setBusy(true);
+    setMsg(null);
+
+    const rpc = isInput
+      ? 'rcm_input_gudang'
+      : 'rcm_output_gudang';
+
+    const { error } =
+      await supabase.rpc(rpc, {
+        p_store_id: storeId,
+        p_product_id: productId,
+        p_pic_id: picId,
+        p_qty: Number(qty),
+        p_unit: unit,
+        p_note: note || null,
+      });
+
+    if (error) {
+      setMsg({
+        ok: false,
+        text: error.message,
+      });
+    } else {
+      setMsg({
+        ok: true,
+        text: isInput
+          ? 'Input gudang berhasil disimpan.'
+          : 'Output gudang berhasil disimpan.',
+      });
+
+      setQty('');
+      setNote('');
+    }
+
+    setBusy(false);
+  }
+
+  return (
+    <Page
+      title={
+        isInput
+          ? 'Input Gudang'
+          : 'Output Gudang'
+      }
+      subtitle={
+        isInput
+          ? 'Menambahkan stok ke gudang'
+          : 'Memindahkan stok dari gudang ke operasional'
+      }
+    >
+      {loading && (
+        <Notice>
+          Memuat data produk…
+        </Notice>
+      )}
+
+      {error && (
+        <div className="error">
+          {error}
+        </div>
+      )}
+
+      <form
+        className="card form"
+        onSubmit={submit}
+      >
+        <label>
+          Produk
+
+          <select
+            value={productId}
+            onChange={(e) =>
+              setProductId(
+                e.target.value
+              )
+            }
+            required
+          >
+            <option value="">
+              Pilih produk
+            </option>
+
+            {items.map((p) => (
+              <option
+                key={p.id}
+                value={p.id}
+              >
+                {p.code} - {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          PIC
+
+          <PicSelect
+            pics={pics}
+            value={picId}
+            onChange={setPicId}
+          />
+        </label>
+
+        <div className="two">
+          <label>
+            Qty
+
+            <input
+              type="number"
+              step="any"
+              min="0"
+              value={qty}
+              onChange={(e) =>
+                setQty(e.target.value)
+              }
+              required
+            />
+          </label>
+
+          <label>
+            Satuan
+
+            <UnitSelect
+              p={product}
+              value={
+                unit ||
+                baseUnit(product)
+              }
+              onChange={setUnit}
+            />
+          </label>
+        </div>
+
+        {product && (
+          <Notice>
+            Base Unit:{' '}
+            <b>
+              {baseUnit(product)}
+            </b>
+
+            <br />
+
+            Qty Base:{' '}
+            <b>
+              {fmt(
+                toBase(
+                  qty,
+                  unit ||
+                    baseUnit(product),
+                  product
+                )
+              )}
+            </b>
+          </Notice>
+        )}
+
+        <label>
+          Catatan
+
+          <textarea
+            value={note}
+            onChange={(e) =>
+              setNote(e.target.value)
+            }
+            rows={3}
+            placeholder="Opsional"
+          />
+        </label>
+
+        <button disabled={busy}>
+          {busy
+            ? 'Menyimpan…'
+            : 'Simpan'}
+        </button>
+
+        <Message msg={msg} />
+      </form>
+    </Page>
+  );
+}
+
+function StockIn({
+  storeId,
+}) {
+  return (
+    <TransactionForm
+      storeId={storeId}
+      mode="input"
+    />
+  );
+}
+
+function OutputGudang({
+  storeId,
+}) {
+  return (
+    <TransactionForm
+      storeId={storeId}
+      mode="output"
+    />
+  );
+}
+
+function SOOperasional({
+  storeId,
+}) {
+  const { items, pics, loading, error } =
+    useData(storeId);
+
+  const [productId, setProductId] =
+    useState('');
+
+  const [picId, setPicId] =
+    useState('');
+
+  const [section, setSection] =
+    useState('Kitchen');
+
+  const [qty, setQty] =
+    useState('');
+
+  const [unit, setUnit] =
+    useState('');
+
+  const [waste, setWaste] =
+    useState('');
+
+  const [note, setNote] =
+    useState('');
+
+  const [msg, setMsg] =
+    useState(null);
+
+  const [busy, setBusy] =
+    useState(false);
+
+  const product = items.find(
+    (p) => p.id === productId
+  );
+
+  useEffect(() => {
+    if (product) {
+      setUnit(baseUnit(product));
+    }
+  }, [productId]);
+
+  async function submit(e) {
+    e.preventDefault();
+
+    if (
+      !storeId ||
+      !productId ||
+      !picId
+    ) {
+      setMsg({
+        ok: false,
+        text:
+          'Store, produk dan PIC wajib diisi.',
+      });
+      return;
+    }
+
+    if (Number(qty) < 0) {
+      setMsg({
+        ok: false,
+        text:
+          'Qty tidak boleh negatif.',
+      });
+      return;
+    }
+
+    setBusy(true);
+    setMsg(null);
+
+    const { error } =
+      await supabase.rpc(
+        'rcm_so_operasional',
+        {
+          p_store_id: storeId,
+          p_product_id: productId,
+          p_pic_id: picId,
+          p_section: section,
+          p_qty: Number(qty),
+          p_unit:
+            unit ||
+            baseUnit(product),
+          p_waste: Number(waste || 0),
+          p_note: note || null,
+        }
+      );
+
+    if (error) {
+      setMsg({
+        ok: false,
+        text: error.message,
+      });
+    } else {
+      setMsg({
+        ok: true,
+        text:
+          'SO operasional berhasil disimpan.',
+      });
+
+      setQty('');
+      setWaste('');
+      setNote('');
+    }
+
+    setBusy(false);
+  }
+
+  return (
+    <Page
+      title="SO Operasional"
+      subtitle="Input stok aktual dan waste operasional"
+    >
+      {loading && (
+        <Notice>
+          Memuat data…
+        </Notice>
+      )}
+
+      {error && (
+        <div className="error">
+          {error}
+        </div>
+      )}
+
+      <form
+        className="card form"
+        onSubmit={submit}
+      >
+        <label>
+          Produk
+
+          <select
+            value={productId}
+            onChange={(e) =>
+              setProductId(
+                e.target.value
+              )
+            }
+            required
+          >
+            <option value="">
+              Pilih produk
+            </option>
+
+            {items.map((p) => (
+              <option
+                key={p.id}
+                value={p.id}
+              >
+                {p.code} - {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          PIC
+
+          <PicSelect
+            pics={pics}
+            value={picId}
+            onChange={setPicId}
+          />
+        </label>
+
+        <label>
+          Section
+
+          <select
+            value={section}
+            onChange={(e) =>
+              setSection(
+                e.target.value
+              )
+            }
+          >
+            <option value="Kitchen">
+              Kitchen
+            </option>
+            <option value="Cashier">
+              Cashier
+            </option>
+            <option value="Bar">
+              Bar
+            </option>
+            <option value="Other">
+              Other
+            </option>
+          </select>
+        </label>
+
+        <div className="two">
+          <label>
+            Stok Aktual
+
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={qty}
+              onChange={(e) =>
+                setQty(e.target.value)
+              }
+              required
+            />
+          </label>
+
+          <label>
+            Satuan
+
+            <UnitSelect
+              p={product}
+              value={
+                unit ||
+                baseUnit(product)
+              }
+              onChange={setUnit}
+            />
+          </label>
+        </div>
+
+        <label>
+          Waste
+
+          <input
+            type="number"
+            min="0"
+            step="any"
+            value={waste}
+            onChange={(e) =>
+              setWaste(e.target.value)
+            }
+          />
+        </label>
+
+        <label>
+          Catatan
+
+          <textarea
+            rows={3}
+            value={note}
+            onChange={(e) =>
+              setNote(e.target.value)
+            }
+          />
+        </label>
+
+        <button disabled={busy}>
+          {busy
+            ? 'Menyimpan…'
+            : 'Simpan SO'}
+        </button>
+
+        <Message msg={msg} />
+      </form>
+    </Page>
+  );
+}
+
+function History({
+  storeId,
+}) {
+  const [rows, setRows] =
+    useState([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState('');
+
+  async function load() {
+    if (!storeId) return;
+
+    setLoading(true);
+
+    const {
+      data,
+      error,
+    } = await supabase
+      .from('stock_transactions')
+      .select(
+        'id,transaction_no,transaction_type,area,section,input_qty,input_unit,base_qty,note,created_at,pic_id,products(name,base_unit),master_pics(name)'
+      )
+      .eq('store_id', storeId)
+      .order('created_at', {
+        ascending: false,
+      })
+      .limit(200);
+
+    if (error) {
+      setError(error.message);
+    } else {
+      setRows(data || []);
+    }
+
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+  }, [storeId]);
+
+  return (
+    <Page
+      title="Riwayat"
+      subtitle="Riwayat transaksi stok store"
+    >
+      {error && (
+        <div className="error">
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <Notice>
+          Memuat riwayat…
+        </Notice>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Tanggal</th>
+                <th>No Transaksi</th>
+                <th>Produk</th>
+                <th>Tipe</th>
+                <th>Qty</th>
+                <th>Base Qty</th>
+                <th>PIC</th>
+                <th>Catatan</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id}>
+                  <td>
+                    {new Date(
+                      row.created_at
+                    ).toLocaleString(
+                      'id-ID'
+                    )}
+                  </td>
+
+                  <td>
+                    {row.transaction_no}
+                  </td>
+
+                  <td>
+                    {row.products?.name ||
+                      '-'}
+                  </td>
+
+                  <td>
+                    {row.transaction_type}
+                  </td>
+
+                  <td>
+                    {fmt(
+                      row.input_qty
+                    )}{' '}
+                    {row.input_unit}
+                  </td>
+
+                  <td>
+                    {fmt(
+                      row.base_qty
+                    )}
+                  </td>
+
+                  <td>
+                    {row.master_pics?.name ||
+                      '-'}
+                  </td>
+
+                  <td>
+                    {row.note || '-'}
+                  </td>
+                </tr>
+              ))}
+
+              {!rows.length && (
+                <tr>
+                  <td
+                    colSpan="8"
+                    className="empty"
+                  >
+                    Belum ada transaksi.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Page>
+  );
+}
+
+function MyHistory({
+  storeId,
+}) {
+  return (
+    <History
+      storeId={storeId}
+    />
+  );
+        }
