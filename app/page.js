@@ -1785,13 +1785,18 @@ function PostingPenjualan({
   const [periodEnd, setPeriodEnd] =
     useState('');
 
+  // Normalisasi nama kolom Excel
   function normalizeKey(value) {
-    return String(value || '')
+    return String(value ?? '')
+      .replace(/\u00A0/g, ' ')
+      .replace(/\s+/g, ' ')
       .trim()
       .toLowerCase()
-      .replace(/\s+/g, '_');
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
   }
 
+  // Cari nama kolom berdasarkan beberapa kemungkinan nama
   function findColumn(headers, names) {
     for (const name of names) {
       const found = headers.find(
@@ -1800,14 +1805,110 @@ function PostingPenjualan({
           normalizeKey(name)
       );
 
-      if (found) return found;
+      if (found) {
+        return found;
+      }
     }
 
     return null;
   }
 
+  // Mencari baris header Excel secara otomatis
+  function findHeaderRow(matrix) {
+    const maxRows =
+      Math.min(matrix.length, 40);
+
+    for (
+      let rowIndex = 0;
+      rowIndex < maxRows;
+      rowIndex++
+    ) {
+      const row =
+        matrix[rowIndex] || [];
+
+      const normalized =
+        row.map(normalizeKey);
+
+      const hasMenuCode =
+        normalized.some((h) =>
+          [
+            'kode_menu',
+            'menu_code',
+            'kode',
+            'code',
+            'plu',
+            'item_code',
+          ].includes(h)
+        );
+
+      const hasMenuName =
+        normalized.some((h) =>
+          [
+            'nama_menu',
+            'menu_name',
+            'nama',
+            'menu',
+            'item',
+            'product_name',
+          ].includes(h)
+        );
+
+      const hasQty =
+        normalized.some((h) =>
+          [
+            'qty',
+            'quantity',
+            'jumlah',
+            'terjual',
+            'sales_qty',
+          ].includes(h)
+        );
+
+      if (
+        (hasMenuCode ||
+          hasMenuName) &&
+        hasQty
+      ) {
+        return rowIndex;
+      }
+    }
+
+    return -1;
+  }
+
+  // Menangani nama kolom yang sama, misalnya "Total" muncul 2 kali
+  function makeUniqueHeaders(values) {
+    const used = new Map();
+
+    return values.map(
+      (value, index) => {
+        const base =
+          String(value ?? '')
+            .trim() ||
+          'Column_' +
+            (index + 1);
+
+        const count =
+          (used.get(base) || 0) +
+          1;
+
+        used.set(
+          base,
+          count
+        );
+
+        return count === 1
+          ? base
+          : base + '_' + count;
+      }
+    );
+  }
+
+  // Konversi tanggal Excel
   function parseDate(value) {
-    if (!value) return null;
+    if (!value) {
+      return null;
+    }
 
     if (
       Object.prototype.toString.call(
@@ -1835,7 +1936,9 @@ function PostingPenjualan({
           value
         );
 
-      if (!date) return null;
+      if (!date) {
+        return null;
+      }
 
       return [
         date.y,
@@ -1909,7 +2012,10 @@ function PostingPenjualan({
       .slice(0, 10);
   }
 
-  async function sha256(buffer) {
+  // SHA-256 untuk mencegah file yang sama diposting ulang
+  async function sha256(
+    buffer
+  ) {
     const hashBuffer =
       await crypto.subtle.digest(
         'SHA-256',
@@ -1917,7 +2023,9 @@ function PostingPenjualan({
       );
 
     return Array.from(
-      new Uint8Array(hashBuffer)
+      new Uint8Array(
+        hashBuffer
+      )
     )
       .map((b) =>
         b
@@ -1927,6 +2035,9 @@ function PostingPenjualan({
       .join('');
   }
 
+  // =========================
+  // BACA FILE EXCEL
+  // =========================
   async function readFile(
     selectedFile
   ) {
@@ -1934,6 +2045,7 @@ function PostingPenjualan({
 
     if (!selectedFile) {
       setRows([]);
+      setFile(null);
       return;
     }
 
@@ -1949,152 +2061,317 @@ function PostingPenjualan({
           cellDates: true,
         });
 
-      const sheetName =
-        workbook.SheetNames[0];
+      let selectedSheet = null;
+      let selectedMatrix = null;
+      let headerRowIndex = -1;
 
-      if (!sheetName) {
-        throw new Error(
-          'Sheet Excel tidak ditemukan.'
-        );
+      // Cari sheet yang memiliki
+      // Menu Code/Menu + Qty
+      for (
+        const sheetName of
+          workbook.SheetNames
+      ) {
+        const sheet =
+          workbook.Sheets[
+            sheetName
+          ];
+
+        const matrix =
+          XLSX.utils.sheet_to_json(
+            sheet,
+            {
+              header: 1,
+              defval: '',
+              blankrows: false,
+            }
+          );
+
+        const foundHeaderRow =
+          findHeaderRow(matrix);
+
+        if (
+          foundHeaderRow >= 0
+        ) {
+          selectedSheet =
+            sheetName;
+
+          selectedMatrix =
+            matrix;
+
+          headerRowIndex =
+            foundHeaderRow;
+
+          break;
+        }
       }
-
-      const sheet =
-        workbook.Sheets[
-          sheetName
-        ];
-
-      const data =
-        XLSX.utils.sheet_to_json(
-          sheet,
-          {
-            defval: '',
-          }
-        );
-
-      if (!data.length) {
-        throw new Error(
-          'Data Excel kosong.'
-        );
-      }
-
-      const headers =
-        Object.keys(data[0]);
-
-      const dateColumn =
-        findColumn(headers, [
-          'tanggal',
-          'date',
-          'sale_date',
-          'tanggal_penjualan',
-        ]);
-
-      const menuCodeColumn =
-        findColumn(headers, [
-          'kode_menu',
-          'menu_code',
-          'kode',
-          'code',
-          'plu',
-          'item_code',
-        ]);
-
-      const menuNameColumn =
-        findColumn(headers, [
-          'nama_menu',
-          'menu_name',
-          'nama',
-          'menu',
-          'item',
-          'product_name',
-        ]);
-
-      const qtyColumn =
-        findColumn(headers, [
-          'qty',
-          'quantity',
-          'jumlah',
-          'terjual',
-          'sales_qty',
-        ]);
 
       if (
-        !menuCodeColumn &&
-        !menuNameColumn
+        !selectedSheet ||
+        !selectedMatrix
       ) {
         throw new Error(
-          'Kolom kode menu atau nama menu tidak ditemukan.'
+          'Header Excel tidak ditemukan. Pastikan file memiliki kolom Menu Code atau Menu dan Qty.'
         );
       }
 
-      if (!qtyColumn) {
+      // Header yang ditemukan
+      const headerValues =
+        selectedMatrix[
+          headerRowIndex
+        ] || [];
+
+      const headers =
+        makeUniqueHeaders(
+          headerValues
+        );
+
+      // =========================
+      // CARI KOLOM MENU CODE
+      // =========================
+      const headerMenuCode =
+        headerValues.find(
+          (h) =>
+            [
+              'kode_menu',
+              'menu_code',
+              'kode',
+              'code',
+              'plu',
+              'item_code',
+            ].includes(
+              normalizeKey(h)
+            )
+        );
+
+      // =========================
+      // CARI KOLOM MENU
+      // =========================
+      const headerMenuName =
+        headerValues.find(
+          (h) =>
+            [
+              'nama_menu',
+              'menu_name',
+              'nama',
+              'menu',
+              'item',
+              'product_name',
+            ].includes(
+              normalizeKey(h)
+            )
+        );
+
+      // =========================
+      // CARI KOLOM QTY
+      // =========================
+      const headerQty =
+        headerValues.find(
+          (h) =>
+            [
+              'qty',
+              'quantity',
+              'jumlah',
+              'terjual',
+              'sales_qty',
+            ].includes(
+              normalizeKey(h)
+            )
+        );
+
+      // =========================
+      // CARI KOLOM TANGGAL
+      // =========================
+      const headerDate =
+        headerValues.find(
+          (h) =>
+            [
+              'tanggal',
+              'date',
+              'sale_date',
+              'tanggal_penjualan',
+            ].includes(
+              normalizeKey(h)
+            )
+        );
+
+      const menuCodeIndex =
+        headerValues.indexOf(
+          headerMenuCode
+        );
+
+      const menuNameIndex =
+        headerValues.indexOf(
+          headerMenuName
+        );
+
+      const qtyIndex =
+        headerValues.indexOf(
+          headerQty
+        );
+
+      const dateIndex =
+        headerValues.indexOf(
+          headerDate
+        );
+
+      if (
+        menuCodeIndex < 0 &&
+        menuNameIndex < 0
+      ) {
         throw new Error(
-          'Kolom Qty tidak ditemukan.'
+          'Kolom Menu Code atau Menu tidak ditemukan pada header Excel.'
         );
       }
+
+      if (qtyIndex < 0) {
+        throw new Error(
+          'Kolom Qty tidak ditemukan pada header Excel.'
+        );
+      }
+
+      // Data dimulai setelah header
+      const dataRows =
+        selectedMatrix.slice(
+          headerRowIndex + 1
+        );
 
       const parsed =
-        data
-          .map((row, index) => {
-            const date =
-              dateColumn
-                ? parseDate(
-                    row[dateColumn]
-                  )
-                : today();
+        dataRows
+          .map(
+            (
+              row,
+              index
+            ) => {
+              const rawData =
+                {};
 
-            const menuCode =
-              String(
-                menuCodeColumn
-                  ? row[
-                      menuCodeColumn
-                    ]
-                  : ''
-              ).trim();
-
-            const menuName =
-              String(
-                menuNameColumn
-                  ? row[
-                      menuNameColumn
-                    ]
-                  : ''
-              ).trim();
-
-            const rawQty =
-              row[qtyColumn];
-
-            const qty =
-              Number(
-                String(
-                  rawQty
-                ).replace(
-                  /,/g,
-                  ''
-                )
+              headers.forEach(
+                (
+                  header,
+                  columnIndex
+                ) => {
+                  rawData[
+                    header
+                  ] =
+                    row[
+                      columnIndex
+                    ] ?? '';
+                }
               );
 
-            return {
-              row_number:
-                index + 2,
-              sale_date:
-                date,
-              menu_code:
-                menuCode ||
-                menuName,
-              menu_name:
-                menuName ||
-                menuCode,
-              qty,
-              raw_data: row,
-            };
-          })
+              const rawMenuCode =
+                menuCodeIndex >= 0
+                  ? row[
+                      menuCodeIndex
+                    ]
+                  : '';
+
+              const rawMenuName =
+                menuNameIndex >= 0
+                  ? row[
+                      menuNameIndex
+                    ]
+                  : '';
+
+              const rawQty =
+                row[qtyIndex];
+
+              const menuCode =
+                String(
+                  rawMenuCode ??
+                    ''
+                ).trim();
+
+              const menuName =
+                String(
+                  rawMenuName ??
+                    ''
+                ).trim();
+
+              // Abaikan baris kosong
+              if (
+                !menuCode &&
+                !menuName &&
+                (rawQty === '' ||
+                  rawQty == null)
+              ) {
+                return null;
+              }
+
+              // Konversi Qty
+              let qty;
+
+              if (
+                typeof rawQty ===
+                'number'
+              ) {
+                qty = rawQty;
+              } else {
+                const qtyText =
+                  String(
+                    rawQty ?? ''
+                  ).trim();
+
+                if (
+                  qtyText === ''
+                ) {
+                  qty = NaN;
+                } else {
+                  qty =
+                    Number(
+                      qtyText.replace(
+                        /,/g,
+                        ''
+                      )
+                    );
+                }
+              }
+
+              // Jika file tidak punya tanggal,
+              // gunakan tanggal hari ini
+              const date =
+                dateIndex >= 0
+                  ? parseDate(
+                      row[
+                        dateIndex
+                      ]
+                    )
+                  : today();
+
+              return {
+                row_number:
+                  headerRowIndex +
+                  index +
+                  2,
+
+                sale_date:
+                  date,
+
+                menu_code:
+                  menuCode ||
+                  menuName,
+
+                menu_name:
+                  menuName ||
+                  menuCode,
+
+                qty,
+
+                raw_data:
+                  rawData,
+              };
+            }
+          )
+          .filter(Boolean)
           .filter(
             (row) =>
               row.menu_code &&
               row.qty !== 0
           );
 
-      if (!parsed.length) {
+      if (
+        !parsed.length
+      ) {
         throw new Error(
           'Tidak ada data penjualan yang valid.'
         );
@@ -2108,7 +2385,9 @@ function PostingPenjualan({
 
       if (invalidDate) {
         throw new Error(
-          `Tanggal pada baris ${invalidDate.row_number} tidak valid.`
+          'Tanggal pada baris ' +
+          invalidDate.row_number +
+          ' tidak valid.'
         );
       }
 
@@ -2122,7 +2401,9 @@ function PostingPenjualan({
 
       if (invalidQty) {
         throw new Error(
-          `Qty pada baris ${invalidQty.row_number} tidak valid.`
+          'Qty pada baris ' +
+          invalidQty.row_number +
+          ' tidak valid.'
         );
       }
 
@@ -2148,7 +2429,11 @@ function PostingPenjualan({
 
       setMsg({
         ok: true,
-        text: `${parsed.length} baris penjualan berhasil dibaca dari Excel.`,
+        text:
+          parsed.length +
+          ' baris penjualan berhasil dibaca dari sheet "' +
+          selectedSheet +
+          '". Header ditemukan otomatis.',
       });
     } catch (error) {
       setRows([]);
@@ -2162,6 +2447,9 @@ function PostingPenjualan({
     }
   }
 
+  // =========================
+  // POSTING KE SUPABASE
+  // =========================
   async function submit() {
     if (!storeId) {
       setMsg({
@@ -2213,32 +2501,49 @@ function PostingPenjualan({
         await sha256(buffer);
 
       const payload =
-        rows.map((row) => ({
-          sale_date:
-            row.sale_date,
-          menu_code:
-            row.menu_code,
-          menu_name:
-            row.menu_name,
-          qty: Number(row.qty),
-          raw_data:
-            row.raw_data,
-        }));
+        rows.map(
+          (row) => ({
+            sale_date:
+              row.sale_date,
 
-      const { data, error } =
+            menu_code:
+              row.menu_code,
+
+            menu_name:
+              row.menu_name,
+
+            qty:
+              Number(row.qty),
+
+            raw_data:
+              row.raw_data,
+          })
+        );
+
+      const {
+        data,
+        error,
+      } =
         await supabase.rpc(
           'rcm_post_sales_import',
           {
-            p_store_id: storeId,
+            p_store_id:
+              storeId,
+
             p_source_file_name:
               file.name,
+
             p_file_hash:
               fileHash,
+
             p_period_start:
               periodStart,
+
             p_period_end:
               periodEnd,
-            p_rows: payload,
+
+            p_rows:
+              payload,
           }
         );
 
@@ -2249,11 +2554,18 @@ function PostingPenjualan({
       setMsg({
         ok: true,
         text:
-          `Posting penjualan berhasil. ${data?.row_count || rows.length} baris tersimpan.`,
+          'Posting penjualan berhasil. ' +
+          (
+            data?.row_count ||
+            rows.length
+          ) +
+          ' baris tersimpan.',
       });
 
       setFile(null);
       setRows([]);
+      setPeriodStart('');
+      setPeriodEnd('');
     } catch (error) {
       setMsg({
         ok: false,
@@ -2269,21 +2581,20 @@ function PostingPenjualan({
   return (
     <Page
       title="Posting Penjualan"
-      subtitle="Upload recap menu penjualan dari aplikasi POS"
+      subtitle="Upload rekap penjualan POS dalam format Excel"
     >
       <div className="card">
         <h3>
           Upload Rekap Penjualan
         </h3>
 
-        <p className="muted">
-          Format yang didukung:
-          XLSX, XLS atau CSV.
+        <p className="text-muted">
+          Sistem akan otomatis mencari
+          kolom Menu Code / Menu dan Qty
+          pada file Excel.
         </p>
 
-        <label>
-          File POS
-
+        <div className="file-box">
           <input
             type="file"
             accept=".xlsx,.xls,.csv"
@@ -2293,24 +2604,27 @@ function PostingPenjualan({
               )
             }
           />
-        </label>
+        </div>
 
-        {file && (
-          <Notice>
-            File:{' '}
-            <b>{file.name}</b>
-          </Notice>
-        )}
+        <Message msg={msg} />
+      </div>
 
-        {rows.length > 0 && (
-          <>
-            <div className="two">
+      {rows.length > 0 && (
+        <>
+          <div className="card">
+            <h3>
+              Periode Penjualan
+            </h3>
+
+            <div className="grid grid-2">
               <label>
-                Periode Mulai
+                Dari tanggal
 
                 <input
                   type="date"
-                  value={periodStart}
+                  value={
+                    periodStart
+                  }
                   onChange={(e) =>
                     setPeriodStart(
                       e.target.value
@@ -2320,11 +2634,13 @@ function PostingPenjualan({
               </label>
 
               <label>
-                Periode Akhir
+                Sampai tanggal
 
                 <input
                   type="date"
-                  value={periodEnd}
+                  value={
+                    periodEnd
+                  }
                   onChange={(e) =>
                     setPeriodEnd(
                       e.target.value
@@ -2333,91 +2649,111 @@ function PostingPenjualan({
                 />
               </label>
             </div>
+          </div>
 
-            <Notice>
-              Ditemukan{' '}
-              <b>
-                {rows.length}
-              </b>{' '}
-              baris penjualan.
-            </Notice>
+          <div className="card">
+            <h3>
+              Preview Data
+            </h3>
 
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>Tanggal</th>
-                    <th>Kode Menu</th>
-                    <th>Nama Menu</th>
-                    <th>Qty</th>
+                    <th>
+                      Tanggal
+                    </th>
+
+                    <th>
+                      Kode Menu
+                    </th>
+
+                    <th>
+                      Nama Menu
+                    </th>
+
+                    <th>
+                      Qty
+                    </th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {rows
                     .slice(0, 100)
-                    .map((row, index) => (
-                      <tr
-                        key={
-                          index
-                        }
-                      >
-                        <td>
-                          {
-                            row.sale_date
+                    .map(
+                      (row) => (
+                        <tr
+                          key={
+                            row.row_number
                           }
-                        </td>
+                        >
+                          <td>
+                            {
+                              row.sale_date
+                            }
+                          </td>
 
-                        <td>
-                          {
-                            row.menu_code
-                          }
-                        </td>
+                          <td>
+                            {
+                              row.menu_code
+                            }
+                          </td>
 
-                        <td>
-                          {
-                            row.menu_name
-                          }
-                        </td>
+                          <td>
+                            {
+                              row.menu_name
+                            }
+                          </td>
 
-                        <td>
-                          {fmt(
-                            row.qty
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                          <td>
+                            {
+                              fmt(
+                                row.qty
+                              )
+                            }
+                          </td>
+                        </tr>
+                      )
+                    )}
                 </tbody>
               </table>
             </div>
 
             {rows.length >
               100 && (
-              <small>
+              <p className="text-muted">
                 Menampilkan 100 baris
                 pertama dari{' '}
-                {rows.length}{' '}
+                {rows.length.toLocaleString(
+                  'id-ID'
+                )}{' '}
                 baris.
-              </small>
+              </p>
             )}
 
-            <button
-              onClick={submit}
-              disabled={loading}
+            <div
+              className="actions"
+              style={{
+                marginTop: 15,
+              }}
             >
-              {loading
-                ? 'Posting…'
-                : 'Posting Penjualan'}
-            </button>
-          </>
-        )}
-
-        <Message msg={msg} />
-      </div>
+              <button
+                className="btn btn-primary"
+                onClick={submit}
+                disabled={loading}
+              >
+                {loading
+                  ? 'Memposting…'
+                  : 'Posting Penjualan'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </Page>
   );
-}
-
+        }
 function Reports({
   storeId,
 }) {
