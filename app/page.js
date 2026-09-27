@@ -2035,62 +2035,93 @@ function PostingPenjualan({
       .join('');
   }
 
-  // =========================
-  // BACA FILE EXCEL
-  // =========================
-  async function readFile(
-    selectedFile
-  ) {
-    setMsg(null);
+// =========================
+// BACA FILE EXCEL POS
+// =========================
+async function readFile(
+  selectedFile
+) {
+  setMsg(null);
 
-    if (!selectedFile) {
-      setRows([]);
-      setFile(null);
-      return;
-    }
+  if (!selectedFile) {
+    setRows([]);
+    setFile(null);
+    return;
+  }
 
-    setFile(selectedFile);
+  setFile(selectedFile);
 
-    try {
-      const buffer =
-        await selectedFile.arrayBuffer();
+  try {
+    const buffer =
+      await selectedFile.arrayBuffer();
 
-      const workbook =
-        XLSX.read(buffer, {
-          type: 'array',
-          cellDates: true,
-        });
+    const workbook =
+      XLSX.read(buffer, {
+        type: 'array',
+        cellDates: true,
+      });
 
-      let selectedSheet = null;
-      let selectedMatrix = null;
-      let headerRowIndex = -1;
+    let selectedSheet = null;
+    let selectedMatrix = null;
+    let headerRowIndex = -1;
 
-      // Cari sheet yang memiliki
-      // Menu Code/Menu + Qty
+    // =====================================
+    // CARI SHEET DAN BARIS HEADER
+    // =====================================
+    for (
+      const sheetName of
+        workbook.SheetNames
+    ) {
+      const sheet =
+        workbook.Sheets[
+          sheetName
+        ];
+
+      const matrix =
+        XLSX.utils.sheet_to_json(
+          sheet,
+          {
+            header: 1,
+            defval: '',
+            blankrows: false,
+          }
+        );
+
+      // Cari baris yang benar-benar
+      // memiliki Menu Code + Menu + Qty
       for (
-        const sheetName of
-          workbook.SheetNames
+        let i = 0;
+        i < matrix.length;
+        i++
       ) {
-        const sheet =
-          workbook.Sheets[
-            sheetName
-          ];
+        const row =
+          matrix[i] || [];
 
-        const matrix =
-          XLSX.utils.sheet_to_json(
-            sheet,
-            {
-              header: 1,
-              defval: '',
-              blankrows: false,
-            }
+        const normalized =
+          row.map(
+            (value) =>
+              normalizeKey(value)
           );
 
-        const foundHeaderRow =
-          findHeaderRow(matrix);
+        const hasMenuCode =
+          normalized.includes(
+            'menu_code'
+          );
+
+        const hasMenu =
+          normalized.includes(
+            'menu'
+          );
+
+        const hasQty =
+          normalized.includes(
+            'qty'
+          );
 
         if (
-          foundHeaderRow >= 0
+          (hasMenuCode ||
+            hasMenu) &&
+          hasQty
         ) {
           selectedSheet =
             sheetName;
@@ -2099,354 +2130,403 @@ function PostingPenjualan({
             matrix;
 
           headerRowIndex =
-            foundHeaderRow;
+            i;
 
           break;
         }
       }
 
       if (
-        !selectedSheet ||
-        !selectedMatrix
+        selectedSheet
       ) {
-        throw new Error(
-          'Header Excel tidak ditemukan. Pastikan file memiliki kolom Menu Code atau Menu dan Qty.'
-        );
+        break;
       }
+    }
 
-      // Header yang ditemukan
-      const headerValues =
-        selectedMatrix[
-          headerRowIndex
-        ] || [];
+    if (
+      !selectedSheet ||
+      !selectedMatrix ||
+      headerRowIndex < 0
+    ) {
+      throw new Error(
+        'Header Excel tidak ditemukan. Pastikan file POS memiliki kolom Menu Code, Menu dan Qty.'
+      );
+    }
 
-      const headers =
-        makeUniqueHeaders(
-          headerValues
-        );
+    // =====================================
+    // HEADER
+    // =====================================
+    const headerValues =
+      selectedMatrix[
+        headerRowIndex
+      ] || [];
 
-      // =========================
-      // CARI KOLOM MENU CODE
-      // =========================
-      const headerMenuCode =
-        headerValues.find(
-          (h) =>
-            [
-              'kode_menu',
-              'menu_code',
-              'kode',
-              'code',
-              'plu',
-              'item_code',
-            ].includes(
-              normalizeKey(h)
-            )
-        );
+    const headers =
+      makeUniqueHeaders(
+        headerValues
+      );
 
-      // =========================
-      // CARI KOLOM MENU
-      // =========================
-      const headerMenuName =
-        headerValues.find(
-          (h) =>
-            [
-              'nama_menu',
-              'menu_name',
-              'nama',
-              'menu',
-              'item',
-              'product_name',
-            ].includes(
-              normalizeKey(h)
-            )
-        );
+    // =====================================
+    // CARI KOLOM MENU CODE
+    // =====================================
+    const menuCodeIndex =
+      headerValues.findIndex(
+        (value) =>
+          normalizeKey(value) ===
+          'menu_code'
+      );
 
-      // =========================
-      // CARI KOLOM QTY
-      // =========================
-      const headerQty =
-        headerValues.find(
-          (h) =>
-            [
-              'qty',
-              'quantity',
-              'jumlah',
-              'terjual',
-              'sales_qty',
-            ].includes(
-              normalizeKey(h)
-            )
-        );
+    // =====================================
+    // CARI KOLOM MENU
+    // =====================================
+    const menuNameIndex =
+      headerValues.findIndex(
+        (value) =>
+          normalizeKey(value) ===
+          'menu'
+      );
 
-      // =========================
-      // CARI KOLOM TANGGAL
-      // =========================
-      const headerDate =
-        headerValues.find(
-          (h) =>
-            [
-              'tanggal',
-              'date',
-              'sale_date',
-              'tanggal_penjualan',
-            ].includes(
-              normalizeKey(h)
-            )
-        );
+    // =====================================
+    // CARI KOLOM QTY
+    // =====================================
+    const qtyIndex =
+      headerValues.findIndex(
+        (value) =>
+          normalizeKey(value) ===
+          'qty'
+      );
 
-      const menuCodeIndex =
-        headerValues.indexOf(
-          headerMenuCode
-        );
+    if (
+      menuCodeIndex < 0 &&
+      menuNameIndex < 0
+    ) {
+      throw new Error(
+        'Kolom Menu Code atau Menu tidak ditemukan pada header Excel.'
+      );
+    }
 
-      const menuNameIndex =
-        headerValues.indexOf(
-          headerMenuName
-        );
+    if (
+      qtyIndex < 0
+    ) {
+      throw new Error(
+        'Kolom Qty tidak ditemukan pada header Excel.'
+      );
+    }
 
-      const qtyIndex =
-        headerValues.indexOf(
-          headerQty
-        );
+    // =====================================
+    // AMBIL PERIODE DARI BAGIAN ATAS FILE
+    // Contoh:
+    // Period | 01-09-2026 - 01-09-2026
+    // =====================================
+    let filePeriodStart = null;
+    let filePeriodEnd = null;
 
-      const dateIndex =
-        headerValues.indexOf(
-          headerDate
+    for (
+      let i = 0;
+      i < headerRowIndex;
+      i++
+    ) {
+      const row =
+        selectedMatrix[i] || [];
+
+      const firstCell =
+        normalizeKey(
+          row[0]
         );
 
       if (
-        menuCodeIndex < 0 &&
-        menuNameIndex < 0
+        firstCell === 'period'
       ) {
-        throw new Error(
-          'Kolom Menu Code atau Menu tidak ditemukan pada header Excel.'
-        );
-      }
+        const periodText =
+          String(
+            row[1] ?? ''
+          ).trim();
 
-      if (qtyIndex < 0) {
-        throw new Error(
-          'Kolom Qty tidak ditemukan pada header Excel.'
-        );
-      }
-
-      // Data dimulai setelah header
-      const dataRows =
-        selectedMatrix.slice(
-          headerRowIndex + 1
-        );
-
-      const parsed =
-        dataRows
-          .map(
-            (
-              row,
-              index
-            ) => {
-              const rawData =
-                {};
-
-              headers.forEach(
-                (
-                  header,
-                  columnIndex
-                ) => {
-                  rawData[
-                    header
-                  ] =
-                    row[
-                      columnIndex
-                    ] ?? '';
-                }
-              );
-
-              const rawMenuCode =
-                menuCodeIndex >= 0
-                  ? row[
-                      menuCodeIndex
-                    ]
-                  : '';
-
-              const rawMenuName =
-                menuNameIndex >= 0
-                  ? row[
-                      menuNameIndex
-                    ]
-                  : '';
-
-              const rawQty =
-                row[qtyIndex];
-
-              const menuCode =
-                String(
-                  rawMenuCode ??
-                    ''
-                ).trim();
-
-              const menuName =
-                String(
-                  rawMenuName ??
-                    ''
-                ).trim();
-
-              // Abaikan baris kosong
-              if (
-                !menuCode &&
-                !menuName &&
-                (rawQty === '' ||
-                  rawQty == null)
-              ) {
-                return null;
-              }
-
-              // Konversi Qty
-              let qty;
-
-              if (
-                typeof rawQty ===
-                'number'
-              ) {
-                qty = rawQty;
-              } else {
-                const qtyText =
-                  String(
-                    rawQty ?? ''
-                  ).trim();
-
-                if (
-                  qtyText === ''
-                ) {
-                  qty = NaN;
-                } else {
-                  qty =
-                    Number(
-                      qtyText.replace(
-                        /,/g,
-                        ''
-                      )
-                    );
-                }
-              }
-
-              // Jika file tidak punya tanggal,
-              // gunakan tanggal hari ini
-              const date =
-                dateIndex >= 0
-                  ? parseDate(
-                      row[
-                        dateIndex
-                      ]
-                    )
-                  : today();
-
-              return {
-                row_number:
-                  headerRowIndex +
-                  index +
-                  2,
-
-                sale_date:
-                  date,
-
-                menu_code:
-                  menuCode ||
-                  menuName,
-
-                menu_name:
-                  menuName ||
-                  menuCode,
-
-                qty,
-
-                raw_data:
-                  rawData,
-              };
-            }
-          )
-          .filter(Boolean)
-          .filter(
-            (row) =>
-              row.menu_code &&
-              row.qty !== 0
+        const periodMatch =
+          periodText.match(
+            /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\s*[-–]\s*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/
           );
 
-      if (
-        !parsed.length
-      ) {
-        throw new Error(
-          'Tidak ada data penjualan yang valid.'
-        );
+        if (
+          periodMatch
+        ) {
+          filePeriodStart =
+            [
+              periodMatch[3],
+              String(
+                periodMatch[2]
+              ).padStart(
+                2,
+                '0'
+              ),
+              String(
+                periodMatch[1]
+              ).padStart(
+                2,
+                '0'
+              ),
+            ].join('-');
+
+          filePeriodEnd =
+            [
+              periodMatch[6],
+              String(
+                periodMatch[5]
+              ).padStart(
+                2,
+                '0'
+              ),
+              String(
+                periodMatch[4]
+              ).padStart(
+                2,
+                '0'
+              ),
+            ].join('-');
+        }
+
+        break;
       }
-
-      const invalidDate =
-        parsed.find(
-          (row) =>
-            !row.sale_date
-        );
-
-      if (invalidDate) {
-        throw new Error(
-          'Tanggal pada baris ' +
-          invalidDate.row_number +
-          ' tidak valid.'
-        );
-      }
-
-      const invalidQty =
-        parsed.find(
-          (row) =>
-            !Number.isFinite(
-              row.qty
-            )
-        );
-
-      if (invalidQty) {
-        throw new Error(
-          'Qty pada baris ' +
-          invalidQty.row_number +
-          ' tidak valid.'
-        );
-      }
-
-      const dates =
-        parsed
-          .map(
-            (r) =>
-              r.sale_date
-          )
-          .sort();
-
-      setPeriodStart(
-        dates[0]
-      );
-
-      setPeriodEnd(
-        dates[
-          dates.length - 1
-        ]
-      );
-
-      setRows(parsed);
-
-      setMsg({
-        ok: true,
-        text:
-          parsed.length +
-          ' baris penjualan berhasil dibaca dari sheet "' +
-          selectedSheet +
-          '". Header ditemukan otomatis.',
-      });
-    } catch (error) {
-      setRows([]);
-
-      setMsg({
-        ok: false,
-        text:
-          error.message ||
-          'Gagal membaca file Excel.',
-      });
     }
-  }
 
+    // =====================================
+    // DATA DIMULAI SETELAH HEADER
+    // =====================================
+    const dataRows =
+      selectedMatrix.slice(
+        headerRowIndex + 1
+      );
+
+    const parsed =
+      dataRows
+        .map(
+          (
+            row,
+            index
+          ) => {
+            const rawData =
+              {};
+
+            headers.forEach(
+              (
+                header,
+                columnIndex
+              ) => {
+                rawData[
+                  header
+                ] =
+                  row[
+                    columnIndex
+                  ] ?? '';
+              }
+            );
+
+            // =========================
+            // MENU CODE
+            // =========================
+            const rawMenuCode =
+              menuCodeIndex >= 0
+                ? row[
+                    menuCodeIndex
+                  ]
+                : '';
+
+            // =========================
+            // MENU NAME
+            // =========================
+            const rawMenuName =
+              menuNameIndex >= 0
+                ? row[
+                    menuNameIndex
+                  ]
+                : '';
+
+            // =========================
+            // QTY
+            // =========================
+            const rawQty =
+              row[
+                qtyIndex
+              ];
+
+            const menuCode =
+              String(
+                rawMenuCode ?? ''
+              ).trim();
+
+            const menuName =
+              String(
+                rawMenuName ?? ''
+              ).trim();
+
+            // Abaikan baris kosong
+            if (
+              !menuCode &&
+              !menuName &&
+              (
+                rawQty === '' ||
+                rawQty == null
+              )
+            ) {
+              return null;
+            }
+
+            // =========================
+            // PARSE QTY
+            // =========================
+            let qty;
+
+            if (
+              typeof rawQty ===
+              'number'
+            ) {
+              qty =
+                rawQty;
+            } else {
+              const qtyText =
+                String(
+                  rawQty ?? ''
+                ).trim();
+
+              if (
+                qtyText === ''
+              ) {
+                qty = NaN;
+              } else {
+                qty =
+                  Number(
+                    qtyText.replace(
+                      /,/g,
+                      ''
+                    )
+                  );
+              }
+            }
+
+            return {
+              row_number:
+                headerRowIndex +
+                index +
+                2,
+
+              sale_date:
+                filePeriodStart,
+
+              menu_code:
+                menuCode ||
+                menuName,
+
+              menu_name:
+                menuName ||
+                menuCode,
+
+              qty,
+
+              raw_data:
+                rawData,
+            };
+          }
+        )
+        .filter(Boolean)
+        .filter(
+          (row) =>
+            row.menu_code &&
+            row.qty !== 0
+        );
+
+    // =====================================
+    // VALIDASI DATA
+    // =====================================
+    if (
+      !parsed.length
+    ) {
+      throw new Error(
+        'Tidak ada data penjualan yang valid pada file Excel.'
+      );
+    }
+
+    // =====================================
+    // VALIDASI PERIODE
+    // =====================================
+    if (
+      !filePeriodStart ||
+      !filePeriodEnd
+    ) {
+      throw new Error(
+        'Periode penjualan tidak ditemukan. Pastikan file POS memiliki baris Period.'
+      );
+    }
+
+    // =====================================
+    // VALIDASI QTY
+    // =====================================
+    const invalidQty =
+      parsed.find(
+        (row) =>
+          !Number.isFinite(
+            row.qty
+          )
+      );
+
+    if (
+      invalidQty
+    ) {
+      throw new Error(
+        'Qty pada baris ' +
+        invalidQty.row_number +
+        ' tidak valid.'
+      );
+    }
+
+    // =====================================
+    // SET PERIODE
+    // =====================================
+    setPeriodStart(
+      filePeriodStart
+    );
+
+    setPeriodEnd(
+      filePeriodEnd
+    );
+
+    // =====================================
+    // SIMPAN DATA
+    // =====================================
+    setRows(
+      parsed
+    );
+
+    setMsg({
+      ok: true,
+      text:
+        parsed.length +
+        ' baris penjualan berhasil dibaca dari sheet "' +
+        selectedSheet +
+        '". Periode: ' +
+        filePeriodStart +
+        ' s/d ' +
+        filePeriodEnd +
+        '.',
+    });
+
+  } catch (
+    error
+  ) {
+    console.error(
+      'READ EXCEL ERROR:',
+      error
+    );
+
+    setRows([]);
+
+    setMsg({
+      ok: false,
+      text:
+        error.message ||
+        'Gagal membaca file Excel.',
+    });
+  }
+}
   // =========================
   // POSTING KE SUPABASE
   // =========================
