@@ -124,3 +124,4815 @@ export default function Home() {
 
       if (error) setMsg(error.message);
     } finally {
+      setBusy(false);
+    }
+  }
+
+  async function logout() {
+    await supabase.auth.signOut();
+    setTab('dashboard');
+  }
+
+  if (!session) {
+    return (
+      <Login
+        email={email}
+        password={password}
+        setEmail={setEmail}
+        setPassword={setPassword}
+        login={login}
+        busy={busy}
+        msg={msg}
+      />
+    );
+  }
+
+  const role = profile?.role;
+  const storeId = profile?.store_id;
+  const isCrew = role === 'crew';
+
+  const menu = isCrew
+    ? [
+        ['dashboard', 'Dashboard'],
+        ['crew-stock', 'Stok'],
+        ['stockin', 'Input Gudang'],
+        ['transfer', 'Output Gudang'],
+        ['crew-opname', 'SO Operasional'],
+        ['crew-history', 'Riwayat Saya'],
+      ]
+    : [
+        ['dashboard', 'Dashboard'],
+        ['stockin', 'Input Gudang'],
+        ['warehouse', 'Stok'],
+        ['transfer', 'Output Gudang'],
+        ['opname', 'SO Operasional'],
+        ['history', 'Riwayat'],
+        ['report', 'Report'],
+        ...(canLeader(role)
+          ? [['revise', 'Revisi']]
+          : []),
+        ...(canAdmin(role)
+          ? [['master', 'Master']]
+          : []),
+      ];
+
+  return (
+    <div className={'shell ' + (isCrew ? 'crew-shell' : '')}>
+      <aside>
+        <div className="sidebrand">
+          <b>RCM</b>
+          <span>Management Stock</span>
+        </div>
+
+        <nav>
+          {menu.map(([id, label]) => (
+            <button
+              key={id}
+              className={tab === id ? 'active' : ''}
+              onClick={() => setTab(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+
+        {canAdmin(role) && tab === 'master' && (
+          <div className="master-submenu">
+            <button onClick={() => setTab('stores')}>
+              Toko
+            </button>
+
+            <button onClick={() => setTab('products')}>
+              Produk
+            </button>
+
+            <button onClick={() => setTab('users')}>
+              Account / User
+            </button>
+
+            <button onClick={() => setTab('shifts')}>
+              Shift
+            </button>
+
+            <button onClick={() => setTab('recipes')}>
+              Recipe
+            </button>
+
+            <button onClick={() => setTab('pics')}>
+              PIC
+            </button>
+          </div>
+        )}
+
+        <button className="logout" onClick={logout}>
+          Keluar
+        </button>
+      </aside>
+
+      <main className="content">
+        <header>
+          <div>
+            <small>STORE</small>
+
+            <h2>
+              {profile?.stores?.name ||
+                'LC Rancamanyar'}
+            </h2>
+
+            {profile?.stores?.code && (
+              <small>{profile.stores.code}</small>
+            )}
+          </div>
+
+          <div className="user">
+            {profile?.full_name ||
+              session.user.email}
+
+            <small>
+              {ROLES[role] || role}
+            </small>
+          </div>
+        </header>
+
+        {msg && (
+          <div className="error top-error">
+            {msg}
+          </div>
+        )}
+
+        <section>
+          {tab === 'dashboard' && (
+            <Dashboard
+              storeId={storeId}
+              setTab={setTab}
+            />
+          )}
+
+          {(tab === 'warehouse' ||
+            tab === 'crew-stock') && (
+            <StockView storeId={storeId} />
+          )}
+
+          {tab === 'stockin' && (
+            <StockIn storeId={storeId} />
+          )}
+
+          {tab === 'transfer' && (
+            <OutputGudang storeId={storeId} />
+          )}
+
+          {(tab === 'opname' ||
+            tab === 'crew-opname') && (
+            <SOOperasional storeId={storeId} />
+          )}
+
+          {tab === 'history' && !isCrew && (
+            <History storeId={storeId} />
+          )}
+
+          {tab === 'crew-history' && (
+            <MyHistory storeId={storeId} />
+          )}
+
+          {tab === 'report' && (
+            <Report storeId={storeId} />
+          )}
+
+          {tab === 'revise' &&
+            canLeader(role) && (
+              <Revision storeId={storeId} />
+            )}
+
+          {tab === 'stores' &&
+            canAdmin(role) && <Stores />}
+
+          {tab === 'products' &&
+            canAdmin(role) && <Products />}
+
+          {tab === 'users' &&
+            canAdmin(role) && <Users />}
+
+          {tab === 'shifts' &&
+            canAdmin(role) && <Shifts />}
+
+          {tab === 'recipes' &&
+            canAdmin(role) && (
+              <Recipes storeId={storeId} />
+            )}
+
+          {tab === 'pics' &&
+            canAdmin(role) && (
+              <Pics storeId={storeId} />
+            )}
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function Login({
+  email,
+  password,
+  setEmail,
+  setPassword,
+  login,
+  busy,
+  msg,
+}) {
+  return (
+    <main className="login">
+      <div className="brand">
+        <div className="logo">RCM</div>
+
+        <h1>Management Stock</h1>
+
+        <p>LC Rancamanyar</p>
+
+        <form
+          onSubmit={login}
+          className="card"
+        >
+          <label>
+            Email
+
+            <input
+              type="email"
+              value={email}
+              onChange={e =>
+                setEmail(e.target.value)
+              }
+              required
+            />
+          </label>
+
+          <label>
+            Password
+
+            <input
+              type="password"
+              value={password}
+              onChange={e =>
+                setPassword(e.target.value)
+              }
+              required
+            />
+          </label>
+
+          <button disabled={busy}>
+            {busy
+              ? 'Memproses…'
+              : 'Masuk'}
+          </button>
+
+          {msg && (
+            <div className="error">
+              {msg}
+            </div>
+          )}
+        </form>
+      </div>
+    </main>
+  );
+}
+
+/* =====================================================
+   DATA
+===================================================== */
+
+function useData(storeId) {
+  const [products, setProducts] = useState([]);
+  const [states, setStates] = useState([]);
+  const [pics, setPics] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  async function load() {
+    if (!storeId) return;
+
+    setLoading(true);
+    setError('');
+
+    const [
+      { data: p, error: pe },
+      { data: s, error: se },
+      { data: pc, error: ce },
+    ] = await Promise.all([
+      supabase
+        .from('products')
+        .select(
+          'id,code,name,category,unit,min_stock,max_stock,active,base_unit,unit_1,unit_1_per_base,unit_2,unit_2_per_base,unit_3,unit_3_per_base'
+        )
+        .eq('active', true)
+        .order('name'),
+
+      supabase
+        .from('stock_control')
+        .select('*')
+        .eq('store_id', storeId),
+
+      supabase
+        .from('master_pics')
+        .select('id,name,active')
+        .eq('store_id', storeId)
+        .eq('active', true)
+        .order('name'),
+    ]);
+
+    if (pe || se || ce) {
+      setError(
+        (pe || se || ce).message
+      );
+    }
+
+    setProducts(p || []);
+    setStates(s || []);
+    setPics(pc || []);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+  }, [storeId]);
+
+  useEffect(() => {
+    if (!storeId) return;
+
+    const ch = supabase
+      .channel('rcm-stock-' + storeId)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'stock_control',
+          filter:
+            'store_id=eq.' + storeId,
+        },
+        load
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'stock_transactions',
+          filter:
+            'store_id=eq.' + storeId,
+        },
+        load
+      );
+
+    return () =>
+      supabase.removeChannel(ch);
+  }, [storeId]);
+
+  const items = useMemo(
+    () =>
+      products.map(p => {
+        const s =
+          states.find(
+            x => x.product_id === p.id
+          ) || {};
+
+        const warehouse = Number(
+          s.warehouse_qty || 0
+        );
+
+        const operational = Number(
+          s.operational_qty || 0
+        );
+
+        const ending =
+          warehouse + operational;
+
+        const opening = Number(
+          s.opening_qty ?? ending
+        );
+
+        const usage =
+          Number(s.usage_qty ?? 0);
+
+        return {
+          ...p,
+          warehouse_qty: warehouse,
+          operational_qty: operational,
+          opening_qty: opening,
+          usage_qty:
+            Number.isFinite(usage)
+              ? usage
+              : opening - ending,
+          ending_qty: ending,
+          last_so_at:
+            s.last_so_at || null,
+        };
+      }),
+    [products, states]
+  );
+
+  return {
+    items,
+    pics,
+    loading,
+    error,
+    reload: load,
+  };
+}
+
+/* =====================================================
+   COMMON
+===================================================== */
+
+function Page({
+  title,
+  subtitle,
+  children,
+}) {
+  return (
+    <div className="page">
+      <div className="page-title">
+        <div>
+          <h1>{title}</h1>
+          <p>{subtitle}</p>
+        </div>
+      </div>
+
+      {children}
+    </div>
+  );
+}
+
+function Notice({ children }) {
+  return (
+    <div className="notice">
+      {children}
+    </div>
+  );
+}
+
+function Message({ msg }) {
+  if (!msg) return null;
+
+  return (
+    <div
+      className={
+        msg.ok ? 'success' : 'error'
+      }
+    >
+      {msg.text}
+    </div>
+  );
+}
+
+function UnitSelect({
+  value,
+  onChange,
+  p,
+}) {
+  const units = [
+    ...new Set(Object.keys(unitMap(p))),
+  ];
+
+  return (
+    <select
+      value={value}
+      onChange={e =>
+        onChange(e.target.value)
+      }
+      required
+    >
+      {units.map(u => (
+        <option
+          key={u}
+          value={u}
+        >
+          {u}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function PicSelect({
+  pics,
+  value,
+  onChange,
+}) {
+  return (
+    <select
+      value={value}
+      onChange={e =>
+        onChange(e.target.value)
+      }
+      required
+    >
+      <option value="">
+        Pilih nama PIC
+      </option>
+
+      {pics.map(p => (
+        <option
+          key={p.id}
+          value={p.id}
+        >
+          {p.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/* =====================================================
+   STOCK
+===================================================== */
+
+function StockView({ storeId }) {
+  const {
+    items,
+    loading,
+    error,
+  } = useData(storeId);
+
+  return (
+    <Page
+      title="Stok"
+      subtitle="Stok awal, pemakaian, dan stok akhir"
+    >
+      <Notice>
+        Stok Akhir = Stok Gudang +
+        Stok Operasional. Stok
+        Operasional adalah gabungan
+        Kasir + Kitchen.
+      </Notice>
+
+      <div className="table-wrap">
+        {loading ? (
+          <p>Memuat stok…</p>
+        ) : error ? (
+          <div className="error">
+            {error}
+          </div>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Produk</th>
+                <th>Base</th>
+                <th>Stok Awal</th>
+                <th>Pemakaian</th>
+                <th>Stok Akhir</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {items.map(x => (
+                <tr key={x.id}>
+                  <td>
+                    <b>{x.name}</b>
+                    <small>{x.code}</small>
+                  </td>
+
+                  <td>
+                    {baseUnit(x)}
+                  </td>
+
+                  <td>
+                    {fmt(
+                      x.opening_qty
+                    )}{' '}
+                    {baseUnit(x)}
+                  </td>
+
+                  <td>
+                    {fmt(
+                      x.usage_qty
+                    )}{' '}
+                    {baseUnit(x)}
+                  </td>
+
+                  <td>
+                    <b>
+                      {fmt(
+                        x.ending_qty
+                      )}{' '}
+                      {baseUnit(x)}
+                    </b>
+
+                    <small>
+                      Gudang{' '}
+                      {fmt(
+                        x.warehouse_qty
+                      )}{' '}
+                      + Operasional{' '}
+                      {fmt(
+                        x.operational_qty
+                      )}
+                    </small>
+                  </td>
+
+                  <td>
+                    <Status
+                      qty={x.ending_qty}
+                      min={x.min_stock}
+                      max={x.max_stock}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </Page>
+  );
+}
+
+function Status({
+  qty,
+  min,
+  max,
+}) {
+  if (
+    Number(qty) <=
+    Number(min || 0)
+  ) {
+    return (
+      <span className="badge danger">
+        Menipis
+      </span>
+    );
+  }
+
+  if (
+    Number(max || 0) > 0 &&
+    Number(qty) >= Number(max)
+  ) {
+    return (
+      <span className="badge warn">
+        Penuh
+      </span>
+    );
+  }
+
+  return (
+    <span className="badge ok">
+      Normal
+    </span>
+  );
+}
+
+/* =====================================================
+   INPUT / OUTPUT GUDANG
+===================================================== */
+
+function TransactionForm({
+  storeId,
+  type,
+}) {
+  const {
+    items,
+    pics,
+    loading,
+    error,
+    reload,
+  } = useData(storeId);
+
+  const [productId, setProductId] =
+    useState('');
+
+  const [picId, setPicId] =
+    useState('');
+
+  const [unit, setUnit] =
+    useState('');
+
+  const [qty, setQty] =
+    useState('');
+
+  const [note, setNote] =
+    useState('');
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [msg, setMsg] =
+    useState(null);
+
+  const p = items.find(
+    x => x.id === productId
+  );
+
+  useEffect(() => {
+    if (p) setUnit(baseUnit(p));
+  }, [productId]);
+
+  const baseQty = p
+    ? toBase(qty, unit, p)
+    : 0;
+
+  async function submit(e) {
+    e.preventDefault();
+
+    setMsg(null);
+
+    if (!p)
+      return setMsg({
+        text: 'Pilih produk terlebih dahulu.',
+      });
+
+    if (!picId)
+      return setMsg({
+        text: 'Pilih PIC terlebih dahulu.',
+      });
+
+    if (
+      !Number.isFinite(
+        Number(qty)
+      ) ||
+      Number(qty) <= 0
+    ) {
+      return setMsg({
+        text: 'Jumlah harus lebih dari 0.',
+      });
+    }
+
+    if (
+      type === 'output' &&
+      baseQty >
+        Number(
+          p.warehouse_qty || 0
+        ) +
+          1e-9
+    ) {
+      return setMsg({
+        text:
+          'Stok gudang tidak cukup.',
+      });
+    }
+
+    setSaving(true);
+
+    try {
+      const { data, error } =
+        await supabase.rpc(
+          type === 'input'
+            ? 'rcm_input_gudang'
+            : 'rcm_output_gudang',
+          {
+            p_store_id: storeId,
+            p_product_id: productId,
+            p_pic_id: picId,
+            p_qty: Number(qty),
+            p_unit: unit,
+            p_note:
+              note.trim() || null,
+          }
+        );
+
+      if (error) {
+        setMsg({
+          text: error.message,
+        });
+      } else {
+        setMsg({
+          ok: true,
+          text: `${
+            type === 'input'
+              ? 'Input'
+              : 'Output'
+          } gudang berhasil disimpan. No: ${
+            data?.transaction_no ||
+            '-'
+          }`,
+        });
+
+        setQty('');
+        setNote('');
+
+        await reload();
+      }
+    } catch (err) {
+      setMsg({
+        text:
+          err?.message ||
+          'Terjadi kesalahan.',
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Page
+      title={
+        type === 'input'
+          ? 'Input Gudang'
+          : 'Output Gudang'
+      }
+      subtitle={
+        type === 'input'
+          ? 'Barang masuk ke stok gudang'
+          : 'Barang keluar gudang → stok operasional'
+      }
+    >
+      {error && (
+        <div className="error">
+          {error}
+        </div>
+      )}
+
+      <form
+        className="card form"
+        onSubmit={submit}
+      >
+        <label>
+          Pilih nama PIC
+
+          <PicSelect
+            pics={pics}
+            value={picId}
+            onChange={setPicId}
+          />
+        </label>
+
+        <label>
+          Pilih produk
+
+          <select
+            value={productId}
+            onChange={e => {
+              setProductId(
+                e.target.value
+              );
+              setMsg(null);
+            }}
+            required
+          >
+            <option value="">
+              Pilih produk
+            </option>
+
+            {items.map(x => (
+              <option
+                key={x.id}
+                value={x.id}
+              >
+                {x.name} — stok gudang{' '}
+                {fmt(
+                  x.warehouse_qty
+                )}{' '}
+                {baseUnit(x)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {p && (
+          <div className="hint">
+            Stok gudang:{' '}
+            <b>
+              {fmt(
+                p.warehouse_qty
+              )}{' '}
+              {baseUnit(p)}
+            </b>
+          </div>
+        )}
+
+        <label>
+          Satuan
+
+          {p ? (
+            <UnitSelect
+              p={p}
+              value={
+                unit ||
+                baseUnit(p)
+              }
+              onChange={setUnit}
+            />
+          ) : (
+            <select disabled>
+              <option>
+                Pilih produk dahulu
+              </option>
+            </select>
+          )}
+        </label>
+
+        <label>
+          Jumlah stok
+
+          <input
+            type="number"
+            min="0.001"
+            step="0.001"
+            value={qty}
+            onChange={e =>
+              setQty(
+                e.target.value
+              )
+            }
+            required
+          />
+        </label>
+
+        {p && qty && (
+          <div className="hint">
+            Nilai tersimpan:{' '}
+            <b>
+              {fmt(baseQty)}{' '}
+              {baseUnit(p)}
+            </b>
+          </div>
+        )}
+
+        <label>
+          Catatan
+
+          <input
+            value={note}
+            onChange={e =>
+              setNote(
+                e.target.value
+              )
+            }
+            placeholder="Opsional"
+          />
+        </label>
+
+        <button
+          disabled={
+            saving || loading
+          }
+        >
+          {saving
+            ? 'Menyimpan…'
+            : type === 'input'
+            ? '＋ Simpan Input Gudang'
+            : '− Simpan Output Gudang'}
+        </button>
+
+        <Message msg={msg} />
+      </form>
+    </Page>
+  );
+}
+
+function StockIn({ storeId }) {
+  return (
+    <TransactionForm
+      storeId={storeId}
+      type="input"
+    />
+  );
+}
+
+function OutputGudang({
+  storeId,
+}) {
+  return (
+    <TransactionForm
+      storeId={storeId}
+      type="output"
+    />
+  );
+}
+
+/* =====================================================
+   SO OPERASIONAL
+===================================================== */
+
+function SOOperasional({
+  storeId,
+}) {
+  const {
+    items,
+    pics,
+    loading,
+    error,
+    reload,
+  } = useData(storeId);
+
+  const [productId, setProductId] =
+    useState('');
+
+  const [picId, setPicId] =
+    useState('');
+
+  const [section, setSection] =
+    useState('kitchen');
+
+  const [unit, setUnit] =
+    useState('');
+
+  const [qty, setQty] =
+    useState('');
+
+  const [waste, setWaste] =
+    useState('0');
+
+  const [note, setNote] =
+    useState('');
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [msg, setMsg] =
+    useState(null);
+
+  const p = items.find(
+    x => x.id === productId
+  );
+
+  useEffect(() => {
+    if (p) setUnit(baseUnit(p));
+  }, [productId]);
+
+  const baseQty = p
+    ? toBase(qty, unit, p)
+    : 0;
+
+  async function submit(e) {
+    e.preventDefault();
+
+    setMsg(null);
+
+    if (!p)
+      return setMsg({
+        text: 'Pilih produk.',
+      });
+
+    if (!picId)
+      return setMsg({
+        text: 'Pilih PIC.',
+      });
+
+    if (
+      !Number.isFinite(
+        Number(qty)
+      ) ||
+      Number(qty) < 0
+    ) {
+      return setMsg({
+        text:
+          'Sisa stok harus 0 atau lebih.',
+      });
+    }
+
+    setSaving(true);
+
+    try {
+      const { data, error } =
+        await supabase.rpc(
+          'rcm_so_operasional',
+          {
+            p_store_id: storeId,
+            p_product_id: productId,
+            p_pic_id: picId,
+            p_section: section,
+            p_qty: Number(qty),
+            p_unit: unit,
+            p_waste_qty: Number(
+              waste || 0
+            ),
+            p_note:
+              note.trim() || null,
+          }
+        );
+
+      if (error) {
+        setMsg({
+          text: error.message,
+        });
+      } else {
+        setMsg({
+          ok: true,
+          text: `SO berhasil disimpan. No: ${
+            data?.transaction_no ||
+            '-'
+          }`,
+        });
+
+        setQty('');
+        setWaste('0');
+        setNote('');
+
+        await reload();
+      }
+    } catch (err) {
+      setMsg({
+        text:
+          err?.message ||
+          'Terjadi kesalahan.',
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Page
+      title="SO Operasional"
+      subtitle="Sisa stok Kasir + Kitchen"
+    >
+      <Notice>
+        Sistem tetap menggunakan
+        aturan SO yang sudah berjalan:
+        SO ≥ 3 jam mengganti stok
+        operasional, sedangkan SO &lt;
+        3 jam menambahkan hasil SO.
+        Output Gudang tetap masuk ke
+        stok operasional.
+      </Notice>
+
+      {error && (
+        <div className="error">
+          {error}
+        </div>
+      )}
+
+      <form
+        className="card form"
+        onSubmit={submit}
+      >
+        <label>
+          Pilih nama PIC
+
+          <PicSelect
+            pics={pics}
+            value={picId}
+            onChange={setPicId}
+          />
+        </label>
+
+        <label>
+          Pilih section
+
+          <select
+            value={section}
+            onChange={e =>
+              setSection(
+                e.target.value
+              )
+            }
+          >
+            <option value="kasir">
+              Kasir
+            </option>
+
+            <option value="kitchen">
+              Kitchen
+            </option>
+          </select>
+        </label>
+
+        <label>
+          Pilih produk
+
+          <select
+            value={productId}
+            onChange={e =>
+              setProductId(
+                e.target.value
+              )
+            }
+            required
+          >
+            <option value="">
+              Pilih produk
+            </option>
+
+            {items.map(x => (
+              <option
+                key={x.id}
+                value={x.id}
+              >
+                {x.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {p && (
+          <div className="hint">
+            Operasional saat ini:{' '}
+            <b>
+              {fmt(
+                p.operational_qty
+              )}{' '}
+              {baseUnit(p)}
+            </b>
+
+            {p.last_so_at && (
+              <>
+                {' '}
+                · SO terakhir{' '}
+                {new Date(
+                  p.last_so_at
+                ).toLocaleString(
+                  'id-ID'
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        <label>
+          Satuan
+
+          {p ? (
+            <UnitSelect
+              p={p}
+              value={
+                unit ||
+                baseUnit(p)
+              }
+              onChange={setUnit}
+            />
+          ) : (
+            <select disabled>
+              <option>
+                Pilih produk dahulu
+              </option>
+            </select>
+          )}
+        </label>
+
+        <label>
+          Jumlah sisa stok
+
+          <input
+            type="number"
+            min="0"
+            step="0.001"
+            value={qty}
+            onChange={e =>
+              setQty(
+                e.target.value
+              )
+            }
+            required
+          />
+        </label>
+
+        {p && qty !== '' && (
+          <div className="hint">
+            Base Unit:{' '}
+            <b>
+              {fmt(baseQty)}{' '}
+              {baseUnit(p)}
+            </b>
+          </div>
+        )}
+
+        <label>
+          Waste
+
+          <input
+            type="number"
+            min="0"
+            step="0.001"
+            value={waste}
+            onChange={e =>
+              setWaste(
+                e.target.value
+              )
+            }
+          />
+        </label>
+
+        <label>
+          Catatan
+
+          <input
+            value={note}
+            onChange={e =>
+              setNote(
+                e.target.value
+              )
+            }
+            placeholder="Opsional"
+          />
+        </label>
+
+        <button
+          disabled={
+            saving || loading
+          }
+        >
+          {saving
+            ? 'Menyimpan…'
+            : '✓ Simpan SO Operasional'}
+        </button>
+
+        <Message msg={msg} />
+      </form>
+    </Page>
+  );
+}
+
+/* =====================================================
+   DASHBOARD
+===================================================== */
+
+function Dashboard({
+  storeId,
+  setTab,
+}) {
+  const {
+    items,
+    loading,
+    error,
+  } = useData(storeId);
+
+  const low = items.filter(
+    x =>
+      x.ending_qty <=
+      Number(x.min_stock || 0)
+  );
+
+  const total = items.reduce(
+    (a, x) =>
+      a + x.ending_qty,
+    0
+  );
+
+  const usage = items.reduce(
+    (a, x) =>
+      a + x.usage_qty,
+    0
+  );
+
+  return (
+    <div className="leader-dashboard">
+      <div className="dash-head">
+        <div>
+          <span className="eyebrow">
+            DASHBOARD
+          </span>
+
+          <h1>
+            Kontrol stok hari ini
+          </h1>
+
+          <p>
+            Semua angka menggunakan
+            Base Unit.
+          </p>
+        </div>
+
+        <button
+          className="refresh"
+          onClick={() =>
+            location.reload()
+          }
+        >
+          ↻ Refresh
+        </button>
+      </div>
+
+      {error && (
+        <div className="error">
+          {error}
+        </div>
+      )}
+
+      <div className="kpi-grid">
+        <Kpi
+          icon="◷"
+          label="Stok Awal"
+          value={
+            loading
+              ? '…'
+              : fmt(
+                  items.reduce(
+                    (a, x) =>
+                      a +
+                      x.opening_qty,
+                    0
+                  )
+                )
+          }
+          meta="Base Unit"
+        />
+
+        <Kpi
+          icon="↓"
+          label="Pemakaian"
+          value={
+            loading
+              ? '…'
+              : fmt(usage)
+          }
+          meta="Stok Awal − Stok Akhir"
+        />
+
+        <Kpi
+          icon="▣"
+          label="Stok Akhir"
+          value={
+            loading
+              ? '…'
+              : fmt(total)
+          }
+          meta="Gudang + Operasional"
+        />
+
+        <Kpi
+          icon="!"
+          label="Menipis"
+          value={
+            loading
+              ? '…'
+              : low.length
+          }
+          meta="Produk perlu dicek"
+          danger={low.length > 0}
+        />
+      </div>
+
+      <div className="panel">
+        <div className="panel-head">
+          <div>
+            <h3>
+              Stok per Produk
+            </h3>
+
+            <span>
+              Base Unit saja
+            </span>
+          </div>
+
+          <button
+            className="linkbtn"
+            onClick={() =>
+              setTab('warehouse')
+            }
+          >
+            Lihat semua
+          </button>
+        </div>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Produk</th>
+                <th>Base</th>
+                <th>Stok Awal</th>
+                <th>Pemakaian</th>
+                <th>Stok Akhir</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {items.map(x => (
+                <tr key={x.id}>
+                  <td>
+                    <b>{x.name}</b>
+                    <small>{x.code}</small>
+                  </td>
+
+                  <td>
+                    {baseUnit(x)}
+                  </td>
+
+                  <td>
+                    {fmt(
+                      x.opening_qty
+                    )}
+                  </td>
+
+                  <td>
+                    {fmt(
+                      x.usage_qty
+                    )}
+                  </td>
+
+                  <td>
+                    <b>
+                      {fmt(
+                        x.ending_qty
+                      )}
+                    </b>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Kpi({
+  icon,
+  label,
+  value,
+  meta,
+  danger,
+}) {
+  return (
+    <div
+      className={
+        'kpi ' +
+        (danger ? 'danger' : '')
+      }
+    >
+      <div className="kpi-icon">
+        {icon}
+      </div>
+
+      <div>
+        <span>{label}</span>
+        <b>{value}</b>
+        <small>{meta}</small>
+      </div>
+    </div>
+  );
+}
+
+/* =====================================================
+   HISTORY
+===================================================== */
+
+function History({
+  storeId,
+}) {
+  return (
+    <TransactionHistory
+      storeId={storeId}
+      mine={false}
+    />
+  );
+}
+
+function MyHistory({
+  storeId,
+}) {
+  return (
+    <TransactionHistory
+      storeId={storeId}
+      mine
+    />
+  );
+}
+
+function TransactionHistory({
+  storeId,
+  mine,
+}) {
+  const [rows, setRows] =
+    useState([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState('');
+
+  async function load() {
+    setLoading(true);
+    setError('');
+
+    let q = supabase
+      .from('stock_transactions')
+      .select(
+        'id,transaction_no,transaction_type,area,section,input_qty,input_unit,base_qty,note,created_at,pic_id,products(name,base_unit),master_pics(name)'
+      )
+      .eq('store_id', storeId)
+      .order('created_at', {
+        ascending: false,
+      })
+      .limit(200);
+
+    if (mine) {
+      const { data: u } =
+        await supabase.auth.getUser();
+
+      if (!u?.user) {
+        setLoading(false);
+        return;
+      }
+
+      q = q.eq(
+        'created_by',
+        u.user.id
+      );
+    }
+
+    const { data, error } =
+      await q;
+
+    if (error)
+      setError(error.message);
+
+    setRows(data || []);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+  }, [storeId, mine]);
+
+  return (
+    <Page
+      title={
+        mine
+          ? 'Riwayat Saya'
+          : 'Riwayat'
+      }
+      subtitle="Input Gudang, Output Gudang dan SO"
+    >
+      <div className="table-wrap">
+        {loading ? (
+          <p>
+            Memuat riwayat…
+          </p>
+        ) : error ? (
+          <div className="error">
+            {error}
+          </div>
+        ) : rows.length === 0 ? (
+          <p>
+            Belum ada transaksi.
+          </p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>No. Transaksi</th>
+                <th>Waktu</th>
+                <th>Jenis</th>
+                <th>PIC</th>
+                <th>Produk</th>
+                <th>Jumlah</th>
+                <th>Base</th>
+                <th>Section</th>
+                <th>Catatan</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.id}>
+                  <td>
+                    <b>
+                      {r.transaction_no ||
+                        '-'}
+                    </b>
+                  </td>
+
+                  <td>
+                    {new Date(
+                      r.created_at
+                    ).toLocaleString(
+                      'id-ID'
+                    )}
+                  </td>
+
+                  <td>
+                    {friendly(
+                      r.transaction_type
+                    )}
+                  </td>
+
+                  <td>
+                    {r.master_pics
+                      ?.name || '-'}
+                  </td>
+
+                  <td>
+                    {r.products
+                      ?.name || '-'}
+                  </td>
+
+                  <td>
+                    {fmt(
+                      r.input_qty ??
+                        r.base_qty
+                    )}{' '}
+                    {r.input_unit ||
+                      r.products
+                        ?.base_unit ||
+                      ''}
+                  </td>
+
+                  <td>
+                    {fmt(
+                      r.base_qty
+                    )}{' '}
+                    {r.products
+                      ?.base_unit || ''}
+                  </td>
+
+                  <td>
+                    {r.section ||
+                      r.area ||
+                      '-'}
+                  </td>
+
+                  <td>
+                    {r.note || '-'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </Page>
+  );
+}
+
+function friendly(t) {
+  return (
+    {
+      stock_in: 'Input Gudang',
+      stock_out: 'Output Gudang',
+      operational_so:
+        'SO Operasional',
+      adjustment: 'Revisi',
+      waste: 'Waste',
+    }[t] ||
+    String(t || '').replaceAll(
+      '_',
+      ' '
+    )
+  );
+}
+
+/* =====================================================
+   REPORT
+===================================================== */
+
+function Report({
+  storeId,
+}) {
+  const [startDate, setStartDate] =
+    useState(
+      new Date()
+        .toISOString()
+        .slice(0, 10)
+    );
+
+  const [endDate, setEndDate] =
+    useState(
+      new Date()
+        .toISOString()
+        .slice(0, 10)
+    );
+
+  const [rows, setRows] =
+    useState([]);
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const [error, setError] =
+    useState('');
+
+  async function loadReport() {
+    setLoading(true);
+    setError('');
+
+    const { data, error } =
+      await supabase.rpc(
+        'rcm_stock_report',
+        {
+          p_end_date: endDate,
+          p_start_date: startDate,
+          p_store_id: storeId,
+        }
+      );
+
+    if (error) {
+      setError(error.message);
+      setRows([]);
+    } else {
+      setRows(data || []);
+    }
+
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    if (storeId)
+      loadReport();
+  }, [storeId]);
+
+  const total = rows.reduce(
+    (a, r) => ({
+      opening:
+        a.opening +
+        Number(
+          r.opening_qty || 0
+        ),
+
+      usage:
+        a.usage +
+        Number(
+          r.usage_qty || 0
+        ),
+
+      ending:
+        a.ending +
+        Number(
+          r.ending_qty || 0
+        ),
+
+      sales:
+        a.sales +
+        Number(
+          r.sales_qty || 0
+        ),
+
+      selisih:
+        a.selisih +
+        Number(
+          r.selisih_qty || 0
+        ),
+    }),
+    {
+      opening: 0,
+      usage: 0,
+      ending: 0,
+      sales: 0,
+      selisih: 0,
+    }
+  );
+
+  return (
+    <Page
+      title="Report"
+      subtitle="Report stok, pemakaian, penjualan dan selisih"
+    >
+      <div className="card form">
+        <div className="two">
+          <label>
+            Tanggal Mulai
+
+            <input
+              type="date"
+              value={startDate}
+              onChange={e =>
+                setStartDate(
+                  e.target.value
+                )
+              }
+            />
+          </label>
+
+          <label>
+            Tanggal Akhir
+
+            <input
+              type="date"
+              value={endDate}
+              onChange={e =>
+                setEndDate(
+                  e.target.value
+                )
+              }
+            />
+          </label>
+        </div>
+
+        <button
+          onClick={loadReport}
+          disabled={loading}
+        >
+          {loading
+            ? 'Memuat…'
+            : 'Tampilkan Report'}
+        </button>
+      </div>
+
+      {error && (
+        <div className="error">
+          {error}
+        </div>
+      )}
+
+      <div className="kpi-grid">
+        <Kpi
+          icon="◷"
+          label="Stok Awal"
+          value={fmt(
+            total.opening
+          )}
+          meta="Base Unit"
+        />
+
+        <Kpi
+          icon="↓"
+          label="Pemakaian"
+          value={fmt(
+            total.usage
+          )}
+          meta="Periode report"
+        />
+
+        <Kpi
+          icon="▣"
+          label="Stok Akhir"
+          value={fmt(
+            total.ending
+          )}
+          meta="Base Unit"
+        />
+
+        <Kpi
+          icon="Δ"
+          label="Selisih"
+          value={fmt(
+            total.selisih
+          )}
+          meta="Penjualan − Pemakaian"
+        />
+      </div>
+
+      <div className="table-wrap">
+        {loading ? (
+          <p>
+            Memuat report…
+          </p>
+        ) : rows.length === 0 ? (
+          <p>
+            Tidak ada data pada
+            periode tersebut.
+          </p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Produk</th>
+                <th>Base</th>
+                <th>Stok Awal</th>
+                <th>Pemakaian</th>
+                <th>Stok Akhir</th>
+                <th>Penjualan</th>
+                <th>Selisih</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {rows.map(r => (
+                <tr
+                  key={r.product_id}
+                >
+                  <td>
+                    <b>
+                      {r.product_name}
+                    </b>
+
+                    <small>
+                      {r.product_code}
+                    </small>
+                  </td>
+
+                  <td>
+                    {r.base_unit}
+                  </td>
+
+                  <td>
+                    {fmt(
+                      r.opening_qty
+                    )}
+                  </td>
+
+                  <td>
+                    {fmt(
+                      r.usage_qty
+                    )}
+                  </td>
+
+                  <td>
+                    <b>
+                      {fmt(
+                        r.ending_qty
+                      )}
+                    </b>
+                  </td>
+
+                  <td>
+                    {fmt(
+                      r.sales_qty
+                    )}
+                  </td>
+
+                  <td>
+                    <b>
+                      {fmt(
+                        r.selisih_qty
+                      )}
+                    </b>
+                  </td>
+                </tr>
+              ))}
+
+              <tr>
+                <td>
+                  <b>TOTAL</b>
+                </td>
+
+                <td>-</td>
+
+                <td>
+                  <b>
+                    {fmt(
+                      total.opening
+                    )}
+                  </b>
+                </td>
+
+                <td>
+                  <b>
+                    {fmt(
+                      total.usage
+                    )}
+                  </b>
+                </td>
+
+                <td>
+                  <b>
+                    {fmt(
+                      total.ending
+                    )}
+                  </b>
+                </td>
+
+                <td>
+                  <b>
+                    {fmt(
+                      total.sales
+                    )}
+                  </b>
+                </td>
+
+                <td>
+                  <b>
+                    {fmt(
+                      total.selisih
+                    )}
+                  </b>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <Notice>
+        Selisih = Penjualan − Pemakaian.
+        Data Report mengikuti histori
+        update stok yang tercatat di
+        sistem.
+      </Notice>
+    </Page>
+  );
+}
+
+/* =====================================================
+   REVISION
+===================================================== */
+
+function Revision({
+  storeId,
+}) {
+  const {
+    items,
+    pics,
+    loading,
+    reload,
+  } = useData(storeId);
+
+  const [kind, setKind] =
+    useState('warehouse');
+
+  const [productId, setProductId] =
+    useState('');
+
+  const [picId, setPicId] =
+    useState('');
+
+  const [unit, setUnit] =
+    useState('');
+
+  const [qty, setQty] =
+    useState('');
+
+  const [note, setNote] =
+    useState('');
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [msg, setMsg] =
+    useState(null);
+
+  const p = items.find(
+    x => x.id === productId
+  );
+
+  useEffect(() => {
+    if (!p) return;
+
+    setUnit(baseUnit(p));
+
+    setQty(
+      String(
+        kind === 'warehouse'
+          ? p.warehouse_qty
+          : kind === 'operational'
+          ? p.operational_qty
+          : p.opening_qty
+      )
+    );
+  }, [productId, kind]);
+
+  async function submit(e) {
+    e.preventDefault();
+
+    setMsg(null);
+
+    if (!p)
+      return setMsg({
+        text: 'Pilih produk.',
+      });
+
+    if (!picId)
+      return setMsg({
+        text: 'Pilih PIC.',
+      });
+
+    if (!note.trim())
+      return setMsg({
+        text:
+          'Alasan revisi wajib diisi.',
+      });
+
+    const inputQty =
+      Number(qty);
+
+    if (
+      !Number.isFinite(
+        inputQty
+      ) ||
+      inputQty < 0
+    ) {
+      return setMsg({
+        text:
+          'Nilai stok tidak valid.',
+      });
+    }
+
+    setSaving(true);
+
+    try {
+      const { data, error } =
+        await supabase.rpc(
+          'rcm_revision',
+          {
+            p_store_id: storeId,
+            p_product_id: productId,
+            p_pic_id: picId,
+            p_kind: kind,
+            p_new_qty: inputQty,
+            p_unit: unit,
+            p_note: note.trim(),
+          }
+        );
+
+      if (error) {
+        setMsg({
+          text: error.message,
+        });
+      } else {
+        setMsg({
+          ok: true,
+          text: `Revisi berhasil. No: ${
+            data?.transaction_no ||
+            '-'
+          }`,
+        });
+
+        setNote('');
+
+        await reload();
+      }
+    } catch (err) {
+      setMsg({
+        text:
+          err?.message ||
+          'Terjadi kesalahan.',
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Page
+      title="Revisi Stok"
+      subtitle="Revisi Gudang, Operasional atau Stok Awal"
+    >
+      <Notice>
+        Revisi adalah transaksi
+        koreksi. Selalu isi alasan
+        revisi agar histori tetap
+        jelas.
+      </Notice>
+
+      <form
+        className="card form"
+        onSubmit={submit}
+      >
+        <label>
+          Jenis Revisi
+
+          <select
+            value={kind}
+            onChange={e =>
+              setKind(
+                e.target.value
+              )
+            }
+          >
+            <option value="warehouse">
+              Revisi Stok Gudang
+            </option>
+
+            <option value="operational">
+              Revisi Stok Operasional
+            </option>
+
+            <option value="opening">
+              Revisi Stok Awal
+            </option>
+          </select>
+        </label>
+
+        <label>
+          Pilih nama PIC
+
+          <PicSelect
+            pics={pics}
+            value={picId}
+            onChange={setPicId}
+          />
+        </label>
+
+        <label>
+          Pilih produk
+
+          <select
+            value={productId}
+            onChange={e =>
+              setProductId(
+                e.target.value
+              )
+            }
+            required
+          >
+            <option value="">
+              Pilih produk
+            </option>
+
+            {items.map(x => (
+              <option
+                key={x.id}
+                value={x.id}
+              >
+                {x.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {p && (
+          <div className="hint">
+            Stok saat ini:{' '}
+            <b>
+              {fmt(
+                kind ===
+                  'warehouse'
+                  ? p.warehouse_qty
+                  : kind ===
+                    'operational'
+                  ? p.operational_qty
+                  : p.opening_qty
+              )}{' '}
+              {baseUnit(p)}
+            </b>
+          </div>
+        )}
+
+        <label>
+          Satuan
+
+          {p ? (
+            <UnitSelect
+              p={p}
+              value={
+                unit ||
+                baseUnit(p)
+              }
+              onChange={setUnit}
+            />
+          ) : (
+            <select disabled>
+              <option>
+                Pilih produk dahulu
+              </option>
+            </select>
+          )}
+        </label>
+
+        <label>
+          Stok setelah revisi
+
+          <input
+            type="number"
+            min="0"
+            step="0.001"
+            value={qty}
+            onChange={e =>
+              setQty(
+                e.target.value
+              )
+            }
+            required
+          />
+        </label>
+
+        <label>
+          Alasan revisi
+
+          <input
+            value={note}
+            onChange={e =>
+              setNote(
+                e.target.value
+              )
+            }
+            required
+            placeholder="Contoh: Koreksi hasil pengecekan fisik"
+          />
+        </label>
+
+        <button
+          disabled={
+            saving || loading
+          }
+        >
+          {saving
+            ? 'Menyimpan…'
+            : '✓ Simpan Revisi'}
+        </button>
+
+        <Message msg={msg} />
+      </form>
+    </Page>
+  );
+}
+
+/* =====================================================
+   MASTER PRODUK
+===================================================== */
+
+function Products() {
+  const [rows, setRows] =
+    useState([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [error, setError] =
+    useState('');
+
+  const blank = {
+    id: null,
+    code: '',
+    name: '',
+    category: '',
+    base_unit: 'kg',
+    unit_1: '',
+    unit_1_per_base: '',
+    unit_2: '',
+    unit_2_per_base: '',
+    unit_3: '',
+    unit_3_per_base: '',
+    min_stock: 0,
+    max_stock: 0,
+    active: true,
+  };
+
+  const [form, setForm] =
+    useState(blank);
+
+  async function load() {
+    setLoading(true);
+
+    const { data, error } =
+      await supabase
+        .from('products')
+        .select('*')
+        .order('name');
+
+    if (error)
+      setError(error.message);
+
+    setRows(data || []);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  function set(k, v) {
+    setForm(f => ({
+      ...f,
+      [k]: v,
+    }));
+  }
+
+  function edit(r) {
+    setForm({
+      ...blank,
+      ...r,
+      code: r.code || '',
+      name: r.name || '',
+      category:
+        r.category || '',
+      unit_1: r.unit_1 || '',
+      unit_2: r.unit_2 || '',
+      unit_3: r.unit_3 || '',
+    });
+  }
+
+  function reset() {
+    setForm(blank);
+  }
+
+  function validate() {
+    if (!form.name.trim())
+      return 'Nama produk wajib diisi.';
+
+    if (
+      !UNITS.includes(
+        form.base_unit
+      )
+    ) {
+      return 'Base satuan tidak valid.';
+    }
+
+    const used = [
+      form.unit_1,
+      form.unit_2,
+      form.unit_3,
+    ].filter(Boolean);
+
+    if (
+      new Set(used).size !==
+      used.length
+    ) {
+      return 'Satuan tambahan tidak boleh duplikat.';
+    }
+
+    for (const [
+      u,
+      v,
+    ] of [
+      [
+        form.unit_1,
+        form.unit_1_per_base,
+      ],
+      [
+        form.unit_2,
+        form.unit_2_per_base,
+      ],
+      [
+        form.unit_3,
+        form.unit_3_per_base,
+      ],
+    ]) {
+      if (
+        u &&
+        (Number(v) <= 0 ||
+          !Number.isFinite(
+            Number(v)
+          ))
+      ) {
+        return `Konversi untuk ${u} harus lebih dari 0.`;
+      }
+    }
+
+    if (
+      Number(form.min_stock) < 0 ||
+      Number(form.max_stock) < 0
+    ) {
+      return 'Min/Max tidak boleh negatif.';
+    }
+
+    if (
+      Number(form.max_stock) >
+        0 &&
+      Number(form.min_stock) >
+        Number(form.max_stock)
+    ) {
+      return 'Min Stock tidak boleh lebih besar dari Max Stock.';
+    }
+
+    return null;
+  }
+
+  async function save(e) {
+    e.preventDefault();
+
+    setError('');
+
+    const validation =
+      validate();
+
+    if (validation) {
+      setError(validation);
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const payload = {
+        p_product_id: form.id,
+
+        p_code:
+          form.code.trim() ||
+          null,
+
+        p_name:
+          form.name.trim(),
+
+        p_category:
+          form.category.trim() ||
+          null,
+
+        p_base_unit:
+          form.base_unit,
+
+        p_unit_1:
+          form.unit_1 || null,
+
+        p_unit_1_per_base:
+          form.unit_1
+            ? Number(
+                form.unit_1_per_base
+              )
+            : null,
+
+        p_unit_2:
+          form.unit_2 || null,
+
+        p_unit_2_per_base:
+          form.unit_2
+            ? Number(
+                form.unit_2_per_base
+              )
+            : null,
+
+        p_unit_3:
+          form.unit_3 || null,
+
+        p_unit_3_per_base:
+          form.unit_3
+            ? Number(
+                form.unit_3_per_base
+              )
+            : null,
+
+        p_min_stock:
+          Number(
+            form.min_stock || 0
+          ),
+
+        p_max_stock:
+          Number(
+            form.max_stock || 0
+          ),
+
+        p_active:
+          !!form.active,
+      };
+
+      const { error } =
+        await supabase.rpc(
+          'rcm_save_product',
+          payload
+        );
+
+      if (error) {
+        setError(error.message);
+      } else {
+        reset();
+        await load();
+      }
+    } catch (err) {
+      setError(
+        err?.message ||
+          'Terjadi kesalahan.'
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Page
+      title="Master Produk"
+      subtitle="Kelola produk dan satuan"
+    >
+      <div className="split">
+        <form
+          className="card form"
+          onSubmit={save}
+        >
+          <h3>
+            {form.id
+              ? 'Edit Produk'
+              : 'Tambah Produk'}
+          </h3>
+
+          <label>
+            Kode Produk
+
+            <input
+              value={form.code}
+              onChange={e =>
+                set(
+                  'code',
+                  e.target.value
+                )
+              }
+            />
+          </label>
+
+          <label>
+            Nama Produk
+
+            <input
+              value={form.name}
+              onChange={e =>
+                set(
+                  'name',
+                  e.target.value
+                )
+              }
+              required
+            />
+          </label>
+
+          <label>
+            Kategori
+
+            <input
+              value={form.category}
+              onChange={e =>
+                set(
+                  'category',
+                  e.target.value
+                )
+              }
+            />
+          </label>
+
+          <label>
+            Base Satuan
+
+            <select
+              value={
+                form.base_unit
+              }
+              onChange={e =>
+                set(
+                  'base_unit',
+                  e.target.value
+                )
+              }
+            >
+              {UNITS.map(u => (
+                <option
+                  key={u}
+                  value={u}
+                >
+                  {u}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <UnitRow
+            n="1"
+            unit={form.unit_1}
+            conv={
+              form.unit_1_per_base
+            }
+            set={set}
+          />
+
+          <UnitRow
+            n="2"
+            unit={form.unit_2}
+            conv={
+              form.unit_2_per_base
+            }
+            set={set}
+          />
+
+          <UnitRow
+            n="3"
+            unit={form.unit_3}
+            conv={
+              form.unit_3_per_base
+            }
+            set={set}
+          />
+
+          <div className="two">
+            <label>
+              Min Stock
+
+              <input
+                type="number"
+                min="0"
+                step="0.001"
+                value={
+                  form.min_stock
+                }
+                onChange={e =>
+                  set(
+                    'min_stock',
+                    e.target.value
+                  )
+                }
+              />
+            </label>
+
+            <label>
+              Max Stock
+
+              <input
+                type="number"
+                min="0"
+                step="0.001"
+                value={
+                  form.max_stock
+                }
+                onChange={e =>
+                  set(
+                    'max_stock',
+                    e.target.value
+                  )
+                }
+              />
+            </label>
+          </div>
+
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={
+                !!form.active
+              }
+              onChange={e =>
+                set(
+                  'active',
+                  e.target.checked
+                )
+              }
+            />
+
+            Produk aktif
+          </label>
+
+          <div className="actions">
+            <button
+              disabled={saving}
+            >
+              {saving
+                ? 'Menyimpan…'
+                : form.id
+                ? 'Simpan Perubahan'
+                : 'Tambah Produk'}
+            </button>
+
+            {form.id && (
+              <button
+                type="button"
+                className="secondary"
+                onClick={reset}
+              >
+                Batal
+              </button>
+            )}
+          </div>
+
+          {error && (
+            <div className="error">
+              {error}
+            </div>
+          )}
+        </form>
+
+        <div className="table-wrap">
+          {loading ? (
+            <p>
+              Memuat produk…
+            </p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Produk</th>
+                  <th>Base</th>
+                  <th>Satuan 1</th>
+                  <th>Satuan 2</th>
+                  <th>Satuan 3</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {rows.map(r => (
+                  <tr key={r.id}>
+                    <td>
+                      <b>
+                        {r.name}
+                      </b>
+
+                      <small>
+                        {r.code || '-'}
+                      </small>
+                    </td>
+
+                    <td>
+                      {r.base_unit ||
+                        r.unit}
+                    </td>
+
+                    <td>
+                      {r.unit_1
+                        ? `${r.unit_1} = ${fmt(
+                            r.unit_1_per_base
+                          )} base`
+                        : '-'}
+                    </td>
+
+                    <td>
+                      {r.unit_2
+                        ? `${r.unit_2} = ${fmt(
+                            r.unit_2_per_base
+                          )} base`
+                        : '-'}
+                    </td>
+
+                    <td>
+                      {r.unit_3
+                        ? `${r.unit_3} = ${fmt(
+                            r.unit_3_per_base
+                          )} base`
+                        : '-'}
+                    </td>
+
+                    <td>
+                      {r.active ? (
+                        <span className="badge ok">
+                          Aktif
+                        </span>
+                      ) : (
+                        <span className="badge danger">
+                          Nonaktif
+                        </span>
+                      )}
+                    </td>
+
+                    <td>
+                      <button
+                        className="smallbtn"
+                        onClick={() =>
+                          edit(r)
+                        }
+                      >
+                        Edit
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </Page>
+  );
+}
+
+function UnitRow({
+  n,
+  unit,
+  conv,
+  set,
+}) {
+  return (
+    <div className="two">
+      <label>
+        Satuan {n}
+
+        <select
+          value={unit}
+          onChange={e =>
+            set(
+              `unit_${n}`,
+              e.target.value
+            )
+          }
+        >
+          <option value="">
+            Tidak digunakan
+          </option>
+
+          {UNITS.map(u => (
+            <option
+              key={u}
+              value={u}
+            >
+              {u}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label>
+        Konversi
+
+        <input
+          type="number"
+          min="0.000001"
+          step="0.000001"
+          value={conv}
+          disabled={!unit}
+          onChange={e =>
+            set(
+              `unit_${n}_per_base`,
+              e.target.value
+            )
+          }
+          placeholder="jumlah Base"
+        />
+      </label>
+    </div>
+  );
+}
+
+/* =====================================================
+   MASTER PIC
+===================================================== */
+
+function Pics({
+  storeId,
+}) {
+  const [rows, setRows] =
+    useState([]);
+
+  const [form, setForm] =
+    useState({
+      id: null,
+      name: '',
+      active: true,
+    });
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [error, setError] =
+    useState('');
+
+  async function load() {
+    const { data, error } =
+      await supabase
+        .from('master_pics')
+        .select('*')
+        .eq('store_id', storeId)
+        .order('name');
+
+    if (error)
+      setError(error.message);
+
+    setRows(data || []);
+  }
+
+  useEffect(() => {
+    load();
+  }, [storeId]);
+
+  async function save(e) {
+    e.preventDefault();
+
+    if (!form.name.trim()) {
+      setError(
+        'Nama PIC wajib diisi.'
+      );
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+
+    try {
+      const { error } =
+        await supabase.rpc(
+          'rcm_admin_save_pic',
+          {
+            p_pic_id: form.id,
+            p_store_id: storeId,
+            p_name:
+              form.name.trim(),
+            p_active:
+              !!form.active,
+          }
+        );
+
+      if (error) {
+        setError(error.message);
+      } else {
+        setForm({
+          id: null,
+          name: '',
+          active: true,
+        });
+
+        await load();
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Page
+      title="Master PIC"
+      subtitle="Kelola PIC per toko"
+    >
+      <div className="split">
+        <form
+          className="card form"
+          onSubmit={save}
+        >
+          <h3>
+            {form.id
+              ? 'Edit PIC'
+              : 'Tambah PIC'}
+          </h3>
+
+          <label>
+            Nama PIC
+
+            <input
+              value={form.name}
+              onChange={e =>
+                setForm(f => ({
+                  ...f,
+                  name: e.target.value,
+                }))
+              }
+              required
+            />
+          </label>
+
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={
+                !!form.active
+              }
+              onChange={e =>
+                setForm(f => ({
+                  ...f,
+                  active:
+                    e.target.checked,
+                }))
+              }
+            />
+
+            PIC aktif
+          </label>
+
+          <div className="actions">
+            <button
+              disabled={saving}
+            >
+              {saving
+                ? 'Menyimpan…'
+                : form.id
+                ? 'Simpan Perubahan'
+                : '＋ Tambah PIC'}
+            </button>
+
+            {form.id && (
+              <button
+                type="button"
+                className="secondary"
+                onClick={() =>
+                  setForm({
+                    id: null,
+                    name: '',
+                    active: true,
+                  })
+                }
+              >
+                Batal
+              </button>
+            )}
+          </div>
+
+          {error && (
+            <div className="error">
+              {error}
+            </div>
+          )}
+        </form>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nama PIC</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.id}>
+                  <td>
+                    <b>{r.name}</b>
+                  </td>
+
+                  <td>
+                    {r.active ? (
+                      <span className="badge ok">
+                        Aktif
+                      </span>
+                    ) : (
+                      <span className="badge danger">
+                        Nonaktif
+                      </span>
+                    )}
+                  </td>
+
+                  <td>
+                    <button
+                      className="smallbtn"
+                      onClick={() =>
+                        setForm({
+                          id: r.id,
+                          name:
+                            r.name ||
+                            '',
+                          active:
+                            !!r.active,
+                        })
+                      }
+                    >
+                      Edit
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </Page>
+  );
+}
+
+/* =====================================================
+   MASTER TOKO
+===================================================== */
+
+function Stores() {
+  const [rows, setRows] =
+    useState([]);
+
+  const [form, setForm] =
+    useState({
+      id: null,
+      code: '',
+      name: '',
+      active: true,
+    });
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [error, setError] =
+    useState('');
+
+  async function load() {
+    const { data, error } =
+      await supabase
+        .from('stores')
+        .select('*')
+        .order('name');
+
+    if (error)
+      setError(error.message);
+
+    setRows(data || []);
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function save(e) {
+    e.preventDefault();
+
+    if (!form.code.trim())
+      return setError(
+        'Kode toko wajib diisi.'
+      );
+
+    if (!form.name.trim())
+      return setError(
+        'Nama toko wajib diisi.'
+      );
+
+    setSaving(true);
+    setError('');
+
+    try {
+      const { error } =
+        await supabase.rpc(
+          'rcm_admin_save_store',
+          {
+            p_store_id: form.id,
+            p_code:
+              form.code.trim(),
+            p_name:
+              form.name.trim(),
+            p_active:
+              !!form.active,
+          }
+        );
+
+      if (error) {
+        setError(error.message);
+      } else {
+        setForm({
+          id: null,
+          code: '',
+          name: '',
+          active: true,
+        });
+
+        await load();
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Page
+      title="Master Toko"
+      subtitle="Kelola cabang / toko"
+    >
+      <div className="split">
+        <form
+          className="card form"
+          onSubmit={save}
+        >
+          <h3>
+            {form.id
+              ? 'Edit Toko'
+              : 'Tambah Toko'}
+          </h3>
+
+          <label>
+            Kode Toko
+
+            <input
+              value={form.code}
+              onChange={e =>
+                setForm(f => ({
+                  ...f,
+                  code: e.target.value,
+                }))
+              }
+              required
+            />
+          </label>
+
+          <label>
+            Nama Toko
+
+            <input
+              value={form.name}
+              onChange={e =>
+                setForm(f => ({
+                  ...f,
+                  name: e.target.value,
+                }))
+              }
+              required
+            />
+          </label>
+
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={
+                !!form.active
+              }
+              onChange={e =>
+                setForm(f => ({
+                  ...f,
+                  active:
+                    e.target.checked,
+                }))
+              }
+            />
+
+            Toko aktif
+          </label>
+
+          <div className="actions">
+            <button
+              disabled={saving}
+            >
+              {saving
+                ? 'Menyimpan…'
+                : form.id
+                ? 'Simpan Perubahan'
+                : '＋ Tambah Toko'}
+            </button>
+
+            {form.id && (
+              <button
+                type="button"
+                className="secondary"
+                onClick={() =>
+                  setForm({
+                    id: null,
+                    code: '',
+                    name: '',
+                    active: true,
+                  })
+                }
+              >
+                Batal
+              </button>
+            )}
+          </div>
+
+          {error && (
+            <div className="error">
+              {error}
+            </div>
+          )}
+        </form>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Kode</th>
+                <th>Nama Toko</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.id}>
+                  <td>
+                    <b>{r.code}</b>
+                  </td>
+
+                  <td>
+                    {r.name}
+                  </td>
+
+                  <td>
+                    {r.active ? (
+                      <span className="badge ok">
+                        Aktif
+                      </span>
+                    ) : (
+                      <span className="badge danger">
+                        Nonaktif
+                      </span>
+                    )}
+                  </td>
+
+                  <td>
+                    <button
+                      className="smallbtn"
+                      onClick={() =>
+                        setForm({
+                          id: r.id,
+                          code:
+                            r.code ||
+                            '',
+                          name:
+                            r.name ||
+                            '',
+                          active:
+                            !!r.active,
+                        })
+                      }
+                    >
+                      Edit
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </Page>
+  );
+}
+
+/* =====================================================
+   MASTER SHIFT
+===================================================== */
+
+function Shifts() {
+  const [stores, setStores] =
+    useState([]);
+
+  const [storeId, setStoreId] =
+    useState('');
+
+  const [rows, setRows] =
+    useState([]);
+
+  const [form, setForm] =
+    useState({
+      id: null,
+      code: '',
+      name: '',
+      start_time: '08:00',
+      end_time: '16:00',
+      active: true,
+    });
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [error, setError] =
+    useState('');
+
+  async function loadStores() {
+    const { data, error } =
+      await supabase
+        .from('stores')
+        .select(
+          'id,name,code'
+        )
+        .eq('active', true)
+        .order('name');
+
+    if (error)
+      setError(error.message);
+
+    setStores(data || []);
+
+    if (
+      !storeId &&
+      data?.length
+    ) {
+      setStoreId(data[0].id);
+    }
+  }
+
+  async function loadRows(id) {
+    if (!id) return;
+
+    const { data, error } =
+      await supabase
+        .from('master_shifts')
+        .select('*')
+        .eq('store_id', id)
+        .order('start_time');
+
+    if (error)
+      setError(error.message);
+
+    setRows(data || []);
+  }
+
+  useEffect(() => {
+    loadStores();
+  }, []);
+
+  useEffect(() => {
+    loadRows(storeId);
+  }, [storeId]);
+
+  async function save(e) {
+    e.preventDefault();
+
+    if (!storeId)
+      return setError(
+        'Pilih toko terlebih dahulu.'
+      );
+
+    if (!form.code.trim())
+      return setError(
+        'Kode shift wajib diisi.'
+      );
+
+    if (!form.name.trim())
+      return setError(
+        'Nama shift wajib diisi.'
+      );
+
+    setSaving(true);
+    setError('');
+
+    try {
+      const { error } =
+        await supabase.rpc(
+          'rcm_admin_save_shift',
+          {
+            p_shift_id: form.id,
+            p_store_id: storeId,
+            p_code:
+              form.code.trim(),
+            p_name:
+              form.name.trim(),
+            p_start_time:
+              form.start_time,
+            p_end_time:
+              form.end_time,
+            p_active:
+              !!form.active,
+          }
+        );
+
+      if (error) {
+        setError(error.message);
+      } else {
+        setForm({
+          id: null,
+          code: '',
+          name: '',
+          start_time: '08:00',
+          end_time: '16:00',
+          active: true,
+        });
+
+        await loadRows(storeId);
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Page
+      title="Master Shift"
+      subtitle="Kelola jadwal shift per toko"
+    >
+      <div className="card form">
+        <label>
+          Pilih Toko
+
+          <select
+            value={storeId}
+            onChange={e =>
+              setStoreId(
+                e.target.value
+              )
+            }
+          >
+            <option value="">
+              Pilih toko
+            </option>
+
+            {stores.map(s => (
+              <option
+                key={s.id}
+                value={s.id}
+              >
+                {s.name} — {s.code}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="split">
+        <form
+          className="card form"
+          onSubmit={save}
+        >
+          <h3>
+            {form.id
+              ? 'Edit Shift'
+              : 'Tambah Shift'}
+          </h3>
+
+          <label>
+            Kode Shift
+
+            <input
+              value={form.code}
+              onChange={e =>
+                setForm(f => ({
+                  ...f,
+                  code: e.target.value,
+                }))
+              }
+              required
+            />
+          </label>
+
+          <label>
+            Nama Shift
+
+            <input
+              value={form.name}
+              onChange={e =>
+                setForm(f => ({
+                  ...f,
+                  name: e.target.value,
+                }))
+              }
+              required
+            />
+          </label>
+
+          <div className="two">
+            <label>
+              Jam Mulai
+
+              <input
+                type="time"
+                value={
+                  form.start_time
+                }
+                onChange={e =>
+                  setForm(f => ({
+                    ...f,
+                    start_time:
+                      e.target.value,
+                  }))
+                }
+                required
+              />
+            </label>
+
+            <label>
+              Jam Selesai
+
+              <input
+                type="time"
+                value={
+                  form.end_time
+                }
+                onChange={e =>
+                  setForm(f => ({
+                    ...f,
+                    end_time:
+                      e.target.value,
+                  }))
+                }
+                required
+              />
+            </label>
+          </div>
+
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={
+                !!form.active
+              }
+              onChange={e =>
+                setForm(f => ({
+                  ...f,
+                  active:
+                    e.target.checked,
+                }))
+              }
+            />
+
+            Shift aktif
+          </label>
+
+          <div className="actions">
+            <button
+              disabled={saving}
+            >
+              {saving
+                ? 'Menyimpan…'
+                : form.id
+                ? 'Simpan Perubahan'
+                : '＋ Tambah Shift'}
+            </button>
+
+            {form.id && (
+              <button
+                type="button"
+                className="secondary"
+                onClick={() =>
+                  setForm({
+                    id: null,
+                    code: '',
+                    name: '',
+                    start_time:
+                      '08:00',
+                    end_time:
+                      '16:00',
+                    active: true,
+                  })
+                }
+              >
+                Batal
+              </button>
+            )}
+          </div>
+
+          {error && (
+            <div className="error">
+              {error}
+            </div>
+          )}
+        </form>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Kode</th>
+                <th>Shift</th>
+                <th>Jam</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.id}>
+                  <td>
+                    {r.code}
+                  </td>
+
+                  <td>
+                    {r.name}
+                  </td>
+
+                  <td>
+                    {String(
+                      r.start_time
+                    ).slice(0, 5)}
+                    {' - '}
+                    {String(
+                      r.end_time
+                    ).slice(0, 5)}
+                  </td>
+
+                  <td>
+                    {r.active ? (
+                      <span className="badge ok">
+                        Aktif
+                      </span>
+                    ) : (
+                      <span className="badge danger">
+                        Nonaktif
+                      </span>
+                    )}
+                  </td>
+
+                  <td>
+                    <button
+                      className="smallbtn"
+                      onClick={() =>
+                        setForm({
+                          id: r.id,
+                          code:
+                            r.code ||
+                            '',
+                          name:
+                            r.name ||
+                            '',
+                          start_time:
+                            String(
+                              r.start_time
+                            ).slice(
+                              0,
+                              5
+                            ),
+                          end_time:
+                            String(
+                              r.end_time
+                            ).slice(
+                              0,
+                              5
+                            ),
+                          active:
+                            !!r.active,
+                        })
+                      }
+                    >
+                      Edit
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </Page>
+  );
+}
+
+/* =====================================================
+   MASTER USER / ACCOUNT
+===================================================== */
+
+function Users() {
+  const [rows, setRows] =
+    useState([]);
+
+  const [stores, setStores] =
+    useState([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [error, setError] =
+    useState('');
+
+  const [form, setForm] =
+    useState({
+      email: '',
+      password: '',
+      full_name: '',
+      role: 'crew',
+      store_id: '',
+    });
+
+  async function load() {
+    setLoading(true);
+
+    const [
+      { data: u, error: ue },
+      { data: s, error: se },
+    ] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select(
+          'id,full_name,role,store_id,active,stores(name,code)'
+        )
+        .order('full_name'),
+
+      supabase
+        .from('stores')
+        .select(
+          'id,name,code'
+        )
+        .eq('active', true)
+        .order('name'),
+    ]);
+
+    if (ue || se) {
+      setError(
+        (ue || se).message
+      );
+    }
+
+    setRows(u || []);
+    setStores(s || []);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function createUser(e) {
+    e.preventDefault();
+
+    setError('');
+
+    if (
+      !form.email.trim()
+    ) {
+      return setError(
+        'Email wajib diisi.'
+      );
+    }
+
+    if (
+      form.password.length <
+      6
+    ) {
+      return setError(
+        'Password minimal 6 karakter.'
+      );
+    }
+
+    if (!form.full_name.trim()) {
+      return setError(
+        'Nama wajib diisi.'
+      );
+    }
+
+    setSaving(true);
+
+    try {
+      const {
+        data,
+        error,
+      } =
+        await supabase.functions.invoke(
+          'admin-create-user',
+          {
+            body: {
+              email:
+                form.email.trim(),
+              password:
+                form.password,
+              full_name:
+                form.full_name.trim(),
+              role: form.role,
+              store_id:
+                form.store_id ||
+                null,
+            },
+          }
+        );
+
+      if (error) {
+        setError(
+          error.message
+        );
+      } else if (
+        data?.error
+      ) {
+        setError(data.error);
+      } else {
+        setForm({
+          email: '',
+          password: '',
+          full_name: '',
+          role: 'crew',
+          store_id: '',
+        });
+
+        await load();
+      }
+    } catch (err) {
+      setError(
+        err?.message ||
+          'Gagal membuat user.'
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function update(
+    id,
+    patch
+  ) {
+    setSaving(true);
+    setError('');
+
+    try {
+      const { error } =
+        await supabase
+          .from('profiles')
+          .update(patch)
+          .eq('id', id);
+
+      if (error)
+        setError(error.message);
+      else await load();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Page
+      title="Master Account / User"
+      subtitle="Kelola akun, role dan toko pengguna"
+    >
+      <div className="split">
+        <form
+          className="card form"
+          onSubmit={createUser}
+        >
+          <h3>
+            Buat Account Baru
+          </h3>
+
+          <label>
+            Nama Lengkap
+
+            <input
+              value={
+                form.full_name
+              }
+              onChange={e =>
+                setForm(f => ({
+                  ...f,
+                  full_name:
+                    e.target.value,
+                }))
+              }
+              required
+            />
+          </label>
+
+          <label>
+            Email Login
+
+            <input
+              type="email"
+              value={form.email}
+              onChange={e =>
+                setForm(f => ({
+                  ...f,
+                  email:
+                    e.target.value,
+                }))
+              }
+              required
+            />
+          </label>
+
+          <label>
+            Password Awal
+
+            <input
+              type="password"
+              minLength={6}
+              value={
+                form.password
+              }
+              onChange={e =>
+                setForm(f => ({
+                  ...f,
+                  password:
+                    e.target.value,
+                }))
+              }
+              required
+            />
+          </label>
+
+          <label>
+            Role
+
+            <select
+              value={form.role}
+              onChange={e =>
+                setForm(f => ({
+                  ...f,
+                  role:
+                    e.target.value,
+                }))
+              }
+            >
+              <option value="admin">
+                Admin
+              </option>
+
+              <option value="store_leader">
+                Store Leader
+              </option>
+
+              <option value="team_leader">
+                Team Leader
+              </option>
+
+              <option value="crew">
+                Crew
+              </option>
+            </select>
+          </label>
+
+          <label>
+            Store
+
+            <select
+              value={
+                form.store_id
+              }
+              onChange={e =>
+                setForm(f => ({
+                  ...f,
+                  store_id:
+                    e.target.value,
+                }))
+              }
+            >
+              <option value="">
+                Tidak ditentukan
+              </option>
+
+              {stores.map(s => (
+                <option
+                  key={s.id}
+                  value={s.id}
+                >
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <button
+            disabled={saving}
+          >
+            {saving
+              ? 'Membuat…'
+              : '＋ Buat Account'}
+          </button>
+
+          {error && (
+            <div className="error">
+              {error}
+            </div>
+          )}
+        </form>
+
+        <div className="table-wrap">
+          {loading ? (
+            <p>
+              Memuat pengguna…
+            </p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Pengguna</th>
+                  <th>Role</th>
+                  <th>Store</th>
+                  <th>Status</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {rows.map(r => (
+                  <tr key={r.id}>
+                    <td>
+                      <b>
+                        {r.full_name ||
+                          'Tanpa Nama'}
+                      </b>
+                    </td>
+
+                    <td>
+                      <select
+                        value={
+                          r.role
+                        }
+                        disabled={
+                          saving
+                        }
+                        onChange={e =>
+                          update(
+                            r.id,
+                            {
+                              role:
+                                e.target
+                                  .value,
+                            }
+                          )
+                        }
+                      >
+                        <option value="admin">
+                          Admin
+                        </option>
+
+                        <option value="store_leader">
+                          Store Leader
+                        </option>
+
+                        <option value="team_leader">
+                          Team Leader
+                        </option>
+
+                        <option value="crew">
+                          Crew
+                        </option>
+                      </select>
+                    </td>
+
+                    <td>
+                      <select
+                        value={
+                          r.store_id ||
+                          ''
+                        }
+                        disabled={
+                          saving
+                        }
+                        onChange={e =>
+                          update(
+                            r.id,
+                            {
+                              store_id:
+                                e.target
+                                  .value ||
+                                null,
+                            }
+                          )
+                        }
+                      >
+                        <option value="">
+                          -
+                        </option>
+
+                        {stores.map(
+                          s => (
+                            <option
+                              key={
+                                s.id
+                              }
+                              value={
+                                s.id
+                              }
+                            >
+                              {s.name}
+                            </option>
+                          )
+                        )}
+                      </select>
+                    </td>
+
+                    <td>
+                      {r.active ? (
+                        <span className="badge ok">
+                          Aktif
+                        </span>
+                      ) : (
+                        <span className="badge danger">
+                          Nonaktif
+                        </span>
+                      )}
+                    </td>
+
+                    <td>
+                      <button
+                        className="smallbtn"
+                        disabled={
+                          saving
+                        }
+                        onClick={() =>
+                          update(
+                            r.id,
+                            {
+                              active:
+                                !r.active,
+                            }
+                          )
+                        }
+                      >
+                        {r.active
+                          ? 'Nonaktifkan'
+                          : 'Aktifkan'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </Page>
+  );
+}
+
+/* =====================================================
+   MASTER RECIPE
+===================================================== */
+
+function Recipes({
+  storeId,
+}) {
+  const [products, setProducts] =
+    useState([]);
+
+  const [rows, setRows] =
+    useState([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [error, setError] =
+    useState('');
+
+  const [form, setForm] =
+    useState({
+      id: null,
+      menu_code: '',
+      menu_name: '',
+      product_id: '',
+      qty_per_menu: '',
+      unit: '',
+      active: true,
+    });
+
+  async function loadProducts() {
+    const { data, error } =
+      await supabase
+        .from('products')
+        .select(
+          'id,code,name,base_unit,unit,unit_1,unit_1_per_base,unit_2,unit_2_per_base,unit_3,unit_3_per_base'
+        )
+        .eq('active', true)
+        .order('name');
+
+    if (error)
+      setError(error.message);
+
+    setProducts(data || []);
+  }
+
+  async function loadRows() {
+    setLoading(true);
+
+    const { data, error } =
+      await supabase
+        .from('recipe_items')
+        .select(
+          'id,store_id,menu_code,menu_name,product_id,qty_per_menu,unit,base_qty_per_menu,active,products(name,code,base_unit)'
+        )
+        .eq('store_id', storeId)
+        .order('menu_code');
+
+    if (error)
+      setError(error.message);
+
+    setRows(data || []);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    loadProducts();
+    loadRows();
+  }, [storeId]);
+
+  const product =
+    products.find(
+      p => p.id === form.product_id
+    );
+
+  useEffect(() => {
+    if (product) {
+      setForm(f => ({
+        ...f,
+        unit:
+          f.unit ||
+          baseUnit(product),
+      }));
+    }
+  }, [product]);
+
+  function reset() {
+    setForm({
+      id: null,
+      menu_code: '',
+      menu_name: '',
+      product_id: '',
+      qty_per_menu: '',
+      unit: '',
+      active: true,
+    });
+  }
+
+  async function save(e) {
+    e.preventDefault();
+
+    setError('');
+
+    if (!form.menu_code.trim())
+      return setError(
+        'Menu POS wajib diisi.'
+      );
+
+    if (!form.menu_name.trim())
+      return setError(
+        'Nama menu wajib diisi.'
+      );
+
+    if (!form.product_id)
+      return setError(
+        'Produk/bahan wajib dipilih.'
+      );
+
+    if (
+      !Number.isFinite(
+        Number(
+          form.qty_per_menu
+        )
+      ) ||
+      Number(
+        form.qty_per_menu
+      ) <= 0
+    ) {
+      return setError(
+        'Qty per menu harus lebih dari 0.'
+      );
+    }
+
+    if (!form.unit)
+      return setError(
+        'Satuan wajib dipilih.'
+      );
+
+    setSaving(true);
+
+    try {
+      const { error } =
+        await supabase.rpc(
+          'rcm_save_recipe',
+          {
+            p_id: form.id,
+            p_store_id: storeId,
+            p_menu_code:
+              form.menu_code.trim(),
+            p_menu_name:
+              form.menu_name.trim(),
+            p_product_id:
+              form.product_id,
+            p_qty_per_menu:
+              Number(
+                form.qty_per_menu
+              ),
+            p_unit: form.unit,
+            p_active:
+              !!form.active,
+          }
+        );
+
+      if (error) {
+        setError(error.message);
+      } else {
+        reset();
+        await loadRows();
+      }
+    } catch (err) {
+      setError(
+        err?.message ||
+          'Gagal menyimpan recipe.'
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Page
+      title="Master Recipe"
+      subtitle="Menu POS, bahan, qty dan satuan"
+    >
+      <div className="split">
+        <form
+          className="card form"
+          onSubmit={save}
+        >
+          <h3>
+            {form.id
+              ? 'Edit Recipe'
+              : 'Tambah Recipe'}
+          </h3>
+
+          <label>
+            Menu POS
+
+            <input
+              value={
+                form.menu_code
+              }
+              onChange={e =>
+                setForm(f => ({
+                  ...f,
+                  menu_code:
+                    e.target.value,
+                }))
+              }
+              placeholder="Contoh: ORG-B"
+              required
+            />
+          </label>
+
+          <label>
+            Nama Menu
+
+            <input
+              value={
+                form.menu_name
+              }
+              onChange={e =>
+                setForm(f => ({
+                  ...f,
+                  menu_name:
+                    e.target.value,
+                }))
+              }
+              placeholder="Contoh: Paket Original B"
+              required
+            />
+          </label>
+
+          <label>
+            Produk / Bahan
+
+            <select
+              value={
+                form.product_id
+              }
+              onChange={e =>
+                setForm(f => ({
+                  ...f,
+                  product_id:
+                    e.target.value,
+                  unit: '',
+                }))
+              }
+              required
+            >
+              <option value="">
+                Pilih produk
+              </option>
+
+              {products.map(
+                p => (
+                  <option
+                    key={p.id}
+                    value={p.id}
+                  >
+                    {p.name} —{' '}
+                    {p.code ||
+                      '-'}
+                  </option>
+                )
+              )}
+            </select>
+          </label>
+
+          <label>
+            Qty Per Menu
+
+            <input
+              type="number"
+              min="0.000001"
+              step="0.000001"
+              value={
+                form.qty_per_menu
+              }
+              onChange={e =>
+                setForm(f => ({
+                  ...f,
+                  qty_per_menu:
+                    e.target.value,
+                }))
+              }
+              required
+            />
+          </label>
+
+          <label>
+            Satuan
+
+            {product ? (
+              <UnitSelect
+                p={product}
+                value={
+                  form.unit ||
+                  baseUnit(product)
+                }
+                onChange={v =>
+                  setForm(f => ({
+                    ...f,
+                    unit: v,
+                  }))
+                }
+              />
+            ) : (
+              <select disabled>
+                <option>
+                  Pilih produk dahulu
+                </option>
+              </select>
+            )}
+          </label>
+
+          {product &&
+            form.qty_per_menu && (
+              <div className="hint">
+                Base Qty per Menu:{' '}
+                <b>
+                  {fmt(
+                    toBase(
+                      form.qty_per_menu,
+                      form.unit ||
+                        baseUnit(
+                          product
+                        ),
+                      product
+                    )
+                  )}{' '}
+                  {baseUnit(
+                    product
+                  )}
+                </b>
+              </div>
+            )}
+
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={
+                !!form.active
+              }
+              onChange={e =>
+                setForm(f => ({
+                  ...f,
+                  active:
+                    e.target.checked,
+                }))
+              }
+            />
+
+            Recipe aktif
+          </label>
+
+          <div className="actions">
+            <button
+              disabled={saving}
+            >
+              {saving
+                ? 'Menyimpan…'
+                : form.id
+                ? 'Simpan Perubahan'
+                : '＋ Simpan Recipe'}
+            </button>
+
+            {form.id && (
+              <button
+                type="button"
+                className="secondary"
+                onClick={reset}
+              >
+                Batal
+              </button>
+            )}
+          </div>
+
+          {error && (
+            <div className="error">
+              {error}
+            </div>
+          )}
+        </form>
+
+        <div className="table-wrap">
+          {loading ? (
+            <p>
+              Memuat recipe…
+            </p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Menu POS</th>
+                  <th>Nama Menu</th>
+                  <th>Produk/Bahan</th>
+                  <th>Qty</th>
+                  <th>Satuan</th>
+                  <th>Base Qty</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {rows.map(r => (
+                  <tr key={r.id}>
+                    <td>
+                      <b>
+                        {r.menu_code}
+                      </b>
+                    </td>
+
+                    <td>
+                      {r.menu_name}
+                    </td>
+
+                    <td>
+                      {r.products
+                        ?.name ||
+                        '-'}
+                    </td>
+
+                    <td>
+                      {fmt(
+                        r.qty_per_menu
+                      )}
+                    </td>
+
+                    <td>
+                      {r.unit}
+                    </td>
+
+                    <td>
+                      {fmt(
+                        r.base_qty_per_menu
+                      )}{' '}
+                      {r.products
+                        ?.base_unit ||
+                        ''}
+                    </td>
+
+                    <td>
+                      {r.active ? (
+                        <span className="badge ok">
+                          Aktif
+                        </span>
+                      ) : (
+                        <span className="badge danger">
+                          Nonaktif
+                        </span>
+                      )}
+                    </td>
+
+                    <td>
+                      <button
+                        className="smallbtn"
+                        onClick={() =>
+                          setForm({
+                            id: r.id,
+                            menu_code:
+                              r.menu_code ||
+                              '',
+                            menu_name:
+                              r.menu_name ||
+                              '',
+                            product_id:
+                              r.product_id ||
+                              '',
+                            qty_per_menu:
+                              r.qty_per_menu ||
+                              '',
+                            unit:
+                              r.unit ||
+                              '',
+                            active:
+                              !!r.active,
+                          })
+                        }
+                      >
+                        Edit
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </Page>
+  );
+}
