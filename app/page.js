@@ -1054,7 +1054,7 @@ function PageContent(props) {
   );
 }
 
-function Dashboard({ stock }) {
+function Dashboard({ stock, products }) {
   const kpi = useMemo(() => {
     let opening = 0;
     let usage = 0;
@@ -1092,11 +1092,14 @@ function Dashboard({ stock }) {
       usage += use;
       ending += end;
 
-      const min =
-        Number(
-          row.product?.min_stock ||
-            0
-        );
+      const product =
+  products?.find((p) => p.id === row.product_id);
+
+const min = Number(product?.min_stock ?? 0);
+
+if (min > 0 && end <= min) {
+  low++;
+}
 
       if (
         min > 0 &&
@@ -1112,7 +1115,7 @@ function Dashboard({ stock }) {
       ending,
       low,
     };
-  }, [stock]);
+  }, [stock, products]);
 
   return (
     <div className="space-y-4">
