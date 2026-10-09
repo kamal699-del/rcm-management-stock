@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase } from '../lib/supabase';
 
 const ROLES = ["admin", "store_leader", "team_leader", "crew"];
 const SECTIONS = ["kasir", "kitchen"];
