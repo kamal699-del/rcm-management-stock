@@ -577,6 +577,33 @@ export default function Page() {
     await supabase.auth.signOut();
   }
 
+async function handleLoggedIn(newSession) {
+  try {
+    setError("");
+    setSuccess("");
+    setSession(newSession);
+
+    const [p, allStores] = await Promise.all([
+      loadProfile(newSession.user.id),
+      loadStores(),
+    ]);
+
+    const defaultStore =
+      p.role === "admin"
+        ? allStores.find((s) => s.active)?.id || ""
+        : p.store_id || "";
+
+    setSelectedStoreId(defaultStore);
+  } catch (e) {
+    setProfile(null);
+    setSession(null);
+    setSelectedStoreId("");
+    fail(e.message || "Gagal memuat profil pengguna.");
+
+    await supabase.auth.signOut();
+  }
+}
+
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-gray-50 p-5">
@@ -594,11 +621,7 @@ export default function Page() {
   }
 
   if (!session) {
-    return (
-      <Login
-        onLoggedIn={setSession}
-      />
-    );
+  return <Login onLoggedIn={handleLoggedIn} />;
   }
 
   if (!profile) {
